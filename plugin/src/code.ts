@@ -1,73 +1,28 @@
-// Main Plugin Code - Edgy Flow Analyzer with Component Suggestions
+// Main Plugin Code - Edgy Flow Analyzer (Simplified)
 
 import { ScreenData, NodeData, ConnectionData, AnalysisResult, PluginMessage, EdgeCaseIssue } from './types';
 
-// Show the UI
-figma.showUI(__html__, {
-    width: 420,
-    height: 700,
-    themeColors: true
-});
+figma.showUI(__html__, { width: 420, height: 700, themeColors: true });
 
 let lastAnalysisResult: AnalysisResult | null = null;
-let enrichedScreensCache: EnrichedScreen[] = [];
+let enrichedScreensCache: any[] = [];
 
-// shadcn Figma file base URL
-const SHADCN_FILE_BASE = 'https://www.figma.com/design/lmUgIGwdG2ZaVfvZzFuU2H/-shadcn-ui---Design-System--Community-?node-id=';
+const SHADCN_BASE = 'https://www.figma.com/design/lmUgIGwdG2ZaVfvZzFuU2H/-shadcn-ui---Design-System--Community-?node-id=';
 
-// Types for enriched data
-interface LibraryMatch {
-    name: string;
-    libraryUrl?: string;
-    libraryName?: string;
-}
-
-interface EnrichedIssue extends EdgeCaseIssue {
-    libraryMatches?: LibraryMatch[];
-}
-
-interface EnrichedScreen {
-    screenId: string;
-    screenName: string;
-    detectedPatterns: string[];
-    issues: EnrichedIssue[];
-    missingStates: string[];
-}
-
-// Component data
-interface ComponentInfo {
-    name: string;
-    nodeId: string;
-    description: string;
-    icon: string;
-    aliases: string[];
-}
-
-const componentLibrary: ComponentInfo[] = [
-    { name: 'Alert', nodeId: '4-6598', description: 'Error/warning messages', icon: '⚠️', aliases: ['alert', 'error', 'warning'] },
-    { name: 'AlertDialog', nodeId: '4-6598', description: 'Confirmation dialogs', icon: '🗨️', aliases: ['alert-dialog', 'confirm'] },
-    { name: 'Button', nodeId: '13-1070', description: 'Action buttons', icon: '🔘', aliases: ['button', 'btn', 'cta'] },
-    { name: 'Input', nodeId: '13-1256', description: 'Form inputs', icon: '📝', aliases: ['input', 'text-field', 'form'] },
-    { name: 'Dialog', nodeId: '13-1026', description: 'Modal windows', icon: '📋', aliases: ['dialog', 'modal', 'popup'] },
-    { name: 'Progress', nodeId: '13-1306', description: 'Progress bars', icon: '⏳', aliases: ['progress', 'loading-bar'] },
-    { name: 'Skeleton', nodeId: '13-1070', description: 'Loading placeholders', icon: '🦴', aliases: ['skeleton', 'loader'] },
-    { name: 'Toast', nodeId: '4-6598', description: 'Notifications', icon: '🍞', aliases: ['toast', 'snackbar'] },
-    { name: 'Card', nodeId: '13-1026', description: 'Content containers', icon: '📦', aliases: ['card', 'container'] },
-    { name: 'Badge', nodeId: '13-1070', description: 'Status indicators', icon: '🏷️', aliases: ['badge', 'tag', 'label'] },
+const componentLibrary = [
+    { name: 'Alert', nodeId: '4-6598', icon: '⚠️', aliases: ['alert', 'error', 'warning'] },
+    { name: 'Button', nodeId: '13-1070', icon: '🔘', aliases: ['button', 'btn', 'cta'] },
+    { name: 'Input', nodeId: '13-1256', icon: '📝', aliases: ['input', 'text-field', 'form'] },
+    { name: 'Dialog', nodeId: '13-1026', icon: '📋', aliases: ['dialog', 'modal', 'popup'] },
+    { name: 'Progress', nodeId: '13-1306', icon: '⏳', aliases: ['progress', 'loading'] },
+    { name: 'Skeleton', nodeId: '13-1070', icon: '🦴', aliases: ['skeleton', 'loader'] },
+    { name: 'Toast', nodeId: '4-6598', icon: '🍞', aliases: ['toast', 'snackbar'] },
+    { name: 'Card', nodeId: '13-1026', icon: '📦', aliases: ['card', 'container'] },
 ];
 
-function findComponentInfo(name: string): ComponentInfo | null {
+function findComponentInfo(name: string) {
     const n = name.toLowerCase();
-    return componentLibrary.find(c => c.name.toLowerCase() === n || c.aliases.some(a => n.includes(a))) || null;
-}
-
-function findComponentLink(name: string): { name: string; url: string } | null {
-    const info = findComponentInfo(name);
-    return info ? { name: info.name, url: SHADCN_FILE_BASE + info.nodeId } : null;
-}
-
-function getLibraryStatus() {
-    return { available: componentLibrary.length, components: componentLibrary.map(c => c.name) };
+    return componentLibrary.find(c => c.name.toLowerCase() === n || c.aliases.some(a => n.includes(a)));
 }
 
 function extractNodeData(node: SceneNode): NodeData {
@@ -87,10 +42,8 @@ function getConnections(frame: FrameNode): ConnectionData[] {
                     const target = figma.getNodeById(reaction.action.destinationId);
                     if (target && target.type === 'FRAME') {
                         connections.push({
-                            triggerNodeId: node.id,
-                            triggerNodeName: node.name,
-                            targetFrameId: target.id,
-                            targetFrameName: target.name
+                            triggerNodeId: node.id, triggerNodeName: node.name,
+                            targetFrameId: target.id, targetFrameName: target.name
                         });
                     }
                 }
@@ -106,10 +59,7 @@ function exportSelectedFrames(): ScreenData[] {
     return figma.currentPage.selection
         .filter((node): node is FrameNode => node.type === 'FRAME')
         .map(frame => ({
-            id: frame.id,
-            name: frame.name,
-            width: frame.width,
-            height: frame.height,
+            id: frame.id, name: frame.name, width: frame.width, height: frame.height,
             children: frame.children.map(child => extractNodeData(child)),
             connections: getConnections(frame)
         }));
@@ -124,403 +74,173 @@ function sendSelectionUpdate(): void {
     figma.ui.postMessage({
         type: 'selection-changed',
         payload: { frameCount: frames.length, frameNames: frames.map(f => f.name) }
-    } as PluginMessage);
+    });
 }
 
-// Colors
-const COLORS = {
-    bg: { r: 0.08, g: 0.08, b: 0.1 },
-    cardBg: { r: 0.12, g: 0.12, b: 0.14 },
-    accent: { r: 0.486, g: 0.227, b: 0.929 },
-    accentLight: { r: 0.659, g: 0.333, b: 0.969 },
-    critical: { r: 0.91, g: 0.3, b: 0.24 },
-    warning: { r: 0.95, g: 0.61, b: 0.07 },
-    info: { r: 0.2, g: 0.6, b: 0.86 },
-    white: { r: 1, g: 1, b: 1 },
-    gray: { r: 0.6, g: 0.6, b: 0.65 },
-    lightGray: { r: 0.85, g: 0.85, b: 0.88 },
-};
-
-// Create the full report + components frame
-async function createFullReport(): Promise<FrameNode | null> {
-    // Check if we have analysis data
-    if (!lastAnalysisResult) {
+// Simple report creation WITHOUT auto layout
+async function createSimpleReport(): Promise<FrameNode | null> {
+    if (!lastAnalysisResult || enrichedScreensCache.length === 0) {
         figma.notify('⚠️ Please run Analyze Flow first!', { error: true });
-        return null;
-    }
-
-    if (enrichedScreensCache.length === 0) {
-        figma.notify('⚠️ No screens to report on', { error: true });
-        return null;
-    }
-
-    try {
-        // Load fonts
-        await figma.loadFontAsync({ family: 'Roboto', style: 'Bold' });
-        await figma.loadFontAsync({ family: 'Roboto', style: 'Bold' });
-        await figma.loadFontAsync({ family: 'Roboto', style: 'Regular' });
-        await figma.loadFontAsync({ family: 'Roboto', style: 'Regular' });
-    } catch (e) {
-        figma.notify('⚠️ Could not load fonts', { error: true });
         return null;
     }
 
     const result = lastAnalysisResult;
     const screens = enrichedScreensCache;
 
-    // Get position (right of selected frames)
+    // Get position
     const selectedFrames = getSelectedFrames();
-    let maxX = 100, minY = 100;
+    let startX = 200, startY = 100;
     if (selectedFrames.length > 0) {
+        let maxX = 0;
         selectedFrames.forEach(f => {
-            if (f.x + f.width > maxX) maxX = f.x + f.width;
-            if (minY === 100 || f.y < minY) minY = f.y;
+            if (f.x + f.width > maxX) { maxX = f.x + f.width; startY = f.y; }
         });
-        maxX += 100;
+        startX = maxX + 100;
     }
 
-    // ============ MAIN CONTAINER ============
+    // Create main frame - simple rectangle, NO auto layout
     const report = figma.createFrame();
-    report.name = '📋 Edge Case Report + Components';
-    report.x = maxX;
-    report.y = minY;
-    report.resize(450, 100); // Will auto-resize
-    report.fills = [{ type: 'SOLID', color: COLORS.bg }];
-    report.cornerRadius = 24;
-    report.layoutMode = 'VERTICAL';
-    report.primaryAxisSizingMode = 'AUTO';
-    report.counterAxisSizingMode = 'FIXED';
-    report.paddingTop = 32;
-    report.paddingBottom = 32;
-    report.paddingLeft = 32;
-    report.paddingRight = 32;
-    report.itemSpacing = 24;
+    report.name = '📋 Edge Case Report';
+    report.x = startX;
+    report.y = startY;
+    report.resize(400, 600);
+    report.fills = [{ type: 'SOLID', color: { r: 0.1, g: 0.1, b: 0.12 } }];
+    report.cornerRadius = 20;
 
-    // ============ HEADER ============
-    const header = figma.createFrame();
-    header.name = 'Header';
-    header.fills = [];
-    header.layoutMode = 'VERTICAL';
-    header.primaryAxisSizingMode = 'AUTO';
-    header.counterAxisSizingMode = 'AUTO';
-    header.itemSpacing = 8;
+    let yPos = 30;
 
-    const title = figma.createText();
-    title.characters = '⚡ Edge Case Report';
-    title.fontSize = 28;
-    title.fontName = { family: 'Roboto', style: 'Bold' };
-    title.fills = [{ type: 'SOLID', color: COLORS.white }];
-    header.appendChild(title);
+    // Title - using rectangle + text approach
+    const titleBg = figma.createRectangle();
+    titleBg.resize(360, 50);
+    titleBg.x = 20;
+    titleBg.y = yPos;
+    titleBg.fills = [{ type: 'SOLID', color: { r: 0.15, g: 0.15, b: 0.18 } }];
+    titleBg.cornerRadius = 10;
+    report.appendChild(titleBg);
 
-    const subtitle = figma.createText();
-    subtitle.characters = `${new Date().toLocaleDateString()} • ${result.totalScreens} screens • ${result.totalIssues} issues`;
-    subtitle.fontSize = 14;
-    subtitle.fontName = { family: 'Roboto', style: 'Regular' };
-    subtitle.fills = [{ type: 'SOLID', color: COLORS.gray }];
-    header.appendChild(subtitle);
+    const titleText = figma.createText();
+    await figma.loadFontAsync({ family: 'Roboto', style: 'Regular' });
+    titleText.characters = `⚡ Edge Case Report - ${result.totalIssues} issues`;
+    titleText.fontSize = 18;
+    titleText.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+    titleText.x = 35;
+    titleText.y = yPos + 15;
+    report.appendChild(titleText);
 
-    report.appendChild(header);
+    yPos += 70;
 
-    // ============ STATS ROW ============
-    const statsRow = figma.createFrame();
-    statsRow.name = 'Stats';
-    statsRow.fills = [{ type: 'SOLID', color: COLORS.cardBg }];
-    statsRow.cornerRadius = 16;
-    statsRow.layoutMode = 'HORIZONTAL';
-    statsRow.primaryAxisSizingMode = 'AUTO';
-    statsRow.counterAxisSizingMode = 'AUTO';
-    statsRow.itemSpacing = 0;
+    // Stats row
+    const statsData = [
+        { label: 'Total', value: result.totalIssues, color: { r: 1, g: 1, b: 1 } },
+        { label: 'Critical', value: result.criticalCount, color: { r: 0.9, g: 0.3, b: 0.3 } },
+        { label: 'Warning', value: result.warningCount, color: { r: 0.95, g: 0.7, b: 0.2 } },
+        { label: 'Info', value: result.infoCount, color: { r: 0.3, g: 0.6, b: 0.9 } },
+    ];
 
-    const addStat = (value: number, label: string, color: RGB) => {
-        const stat = figma.createFrame();
-        stat.name = label;
-        stat.fills = [];
-        stat.layoutMode = 'VERTICAL';
-        stat.primaryAxisSizingMode = 'AUTO';
-        stat.counterAxisSizingMode = 'AUTO';
-        stat.primaryAxisAlignItems = 'CENTER';
-        stat.counterAxisAlignItems = 'CENTER';
-        stat.paddingTop = 16;
-        stat.paddingBottom = 16;
-        stat.paddingLeft = 24;
-        stat.paddingRight = 24;
-        stat.itemSpacing = 4;
+    let statX = 25;
+    for (const stat of statsData) {
+        const statBg = figma.createRectangle();
+        statBg.resize(85, 60);
+        statBg.x = statX;
+        statBg.y = yPos;
+        statBg.fills = [{ type: 'SOLID', color: { r: 0.15, g: 0.15, b: 0.18 } }];
+        statBg.cornerRadius = 8;
+        report.appendChild(statBg);
 
-        const val = figma.createText();
-        val.characters = value.toString();
-        val.fontSize = 28;
-        val.fontName = { family: 'Roboto', style: 'Bold' };
-        val.fills = [{ type: 'SOLID', color }];
-        stat.appendChild(val);
+        const statValue = figma.createText();
+        statValue.characters = stat.value.toString();
+        statValue.fontSize = 24;
+        statValue.fills = [{ type: 'SOLID', color: stat.color }];
+        statValue.x = statX + 30;
+        statValue.y = yPos + 8;
+        report.appendChild(statValue);
 
-        const lbl = figma.createText();
-        lbl.characters = label;
-        lbl.fontSize = 11;
-        lbl.fontName = { family: 'Roboto', style: 'Regular' };
-        lbl.fills = [{ type: 'SOLID', color: COLORS.gray }];
-        stat.appendChild(lbl);
+        const statLabel = figma.createText();
+        statLabel.characters = stat.label;
+        statLabel.fontSize = 10;
+        statLabel.fills = [{ type: 'SOLID', color: { r: 0.6, g: 0.6, b: 0.65 } }];
+        statLabel.x = statX + 20;
+        statLabel.y = yPos + 40;
+        report.appendChild(statLabel);
 
-        statsRow.appendChild(stat);
-    };
+        statX += 92;
+    }
 
-    addStat(result.totalIssues, 'Total', COLORS.white);
-    addStat(result.criticalCount, 'Critical', COLORS.critical);
-    addStat(result.warningCount, 'Warning', COLORS.warning);
-    addStat(result.infoCount, 'Info', COLORS.info);
+    yPos += 80;
 
-    report.appendChild(statsRow);
-
-    // ============ ISSUES BY SCREEN ============
+    // Issues section
     for (const screen of screens) {
         if (screen.issues.length === 0) continue;
 
-        const section = figma.createFrame();
-        section.name = screen.screenName;
-        section.fills = [{ type: 'SOLID', color: COLORS.cardBg }];
-        section.cornerRadius = 16;
-        section.layoutMode = 'VERTICAL';
-        section.primaryAxisSizingMode = 'AUTO';
-        section.counterAxisSizingMode = 'FIXED';
-        section.layoutAlign = 'STRETCH';
-        section.paddingTop = 16;
-        section.paddingBottom = 16;
-        section.paddingLeft = 20;
-        section.paddingRight = 20;
-        section.itemSpacing = 12;
+        // Screen header
+        const screenText = figma.createText();
+        screenText.characters = `📱 ${screen.screenName}`;
+        screenText.fontSize = 14;
+        screenText.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+        screenText.x = 25;
+        screenText.y = yPos;
+        report.appendChild(screenText);
 
-        const screenTitle = figma.createText();
-        screenTitle.characters = `📱 ${screen.screenName}`;
-        screenTitle.fontSize = 16;
-        screenTitle.fontName = { family: 'Roboto', style: 'Bold' };
-        screenTitle.fills = [{ type: 'SOLID', color: COLORS.white }];
-        section.appendChild(screenTitle);
+        yPos += 25;
 
+        // Issues
         for (const issue of screen.issues) {
-            const issueRow = figma.createFrame();
-            issueRow.name = issue.name;
-            issueRow.fills = [];
-            issueRow.layoutMode = 'VERTICAL';
-            issueRow.primaryAxisSizingMode = 'AUTO';
-            issueRow.counterAxisSizingMode = 'FIXED';
-            issueRow.layoutAlign = 'STRETCH';
-            issueRow.itemSpacing = 6;
+            const icon = issue.severity === 'critical' ? '🔴' : issue.severity === 'warning' ? '🟡' : '🔵';
 
-            // Issue name with severity
-            const issueHeader = figma.createFrame();
-            issueHeader.name = 'Header';
-            issueHeader.fills = [];
-            issueHeader.layoutMode = 'HORIZONTAL';
-            issueHeader.primaryAxisSizingMode = 'AUTO';
-            issueHeader.counterAxisSizingMode = 'AUTO';
-            issueHeader.itemSpacing = 8;
+            const issueText = figma.createText();
+            issueText.characters = `${icon} ${issue.name}`;
+            issueText.fontSize = 12;
+            issueText.fills = [{ type: 'SOLID', color: { r: 0.85, g: 0.85, b: 0.88 } }];
+            issueText.x = 35;
+            issueText.y = yPos;
+            report.appendChild(issueText);
 
-            const icon = figma.createText();
-            icon.characters = issue.severity === 'critical' ? '🔴' : issue.severity === 'warning' ? '🟡' : '🔵';
-            icon.fontSize = 14;
-            issueHeader.appendChild(icon);
+            yPos += 18;
 
-            const issueName = figma.createText();
-            issueName.characters = issue.name;
-            issueName.fontSize = 14;
-            issueName.fontName = { family: 'Roboto', style: 'Regular' };
-            issueName.fills = [{ type: 'SOLID', color: COLORS.lightGray }];
-            issueHeader.appendChild(issueName);
-
-            issueRow.appendChild(issueHeader);
-
-            // Component tags with links
-            const tagsRow = figma.createFrame();
-            tagsRow.name = 'Tags';
-            tagsRow.fills = [];
-            tagsRow.layoutMode = 'HORIZONTAL';
-            tagsRow.primaryAxisSizingMode = 'AUTO';
-            tagsRow.counterAxisSizingMode = 'AUTO';
-            tagsRow.itemSpacing = 8;
-            tagsRow.paddingLeft = 22;
-
+            // Component links
             for (const comp of issue.suggestedComponents) {
                 const info = findComponentInfo(comp);
                 if (!info) continue;
 
-                const tag = figma.createFrame();
-                tag.name = info.name;
-                tag.fills = [{ type: 'SOLID', color: COLORS.accent }];
-                tag.cornerRadius = 6;
-                tag.layoutMode = 'HORIZONTAL';
-                tag.primaryAxisSizingMode = 'AUTO';
-                tag.counterAxisSizingMode = 'AUTO';
-                tag.paddingTop = 4;
-                tag.paddingBottom = 4;
-                tag.paddingLeft = 8;
-                tag.paddingRight = 8;
-                tag.itemSpacing = 4;
+                const linkBg = figma.createRectangle();
+                linkBg.resize(80, 20);
+                linkBg.x = 50;
+                linkBg.y = yPos;
+                linkBg.fills = [{ type: 'SOLID', color: { r: 0.48, g: 0.23, b: 0.93 } }];
+                linkBg.cornerRadius = 4;
+                report.appendChild(linkBg);
 
-                const tagText = figma.createText();
-                tagText.characters = `🔗 ${info.name}`;
-                tagText.fontSize = 10;
-                tagText.fontName = { family: 'Roboto', style: 'Bold' };
-                tagText.fills = [{ type: 'SOLID', color: COLORS.white }];
-                tagText.hyperlink = { type: 'URL', value: SHADCN_FILE_BASE + info.nodeId };
-                tag.appendChild(tagText);
+                const linkText = figma.createText();
+                linkText.characters = `🔗 ${info.name}`;
+                linkText.fontSize = 10;
+                linkText.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+                linkText.x = 55;
+                linkText.y = yPos + 4;
+                linkText.hyperlink = { type: 'URL', value: SHADCN_BASE + info.nodeId };
+                report.appendChild(linkText);
 
-                tagsRow.appendChild(tag);
+                yPos += 25;
             }
 
-            issueRow.appendChild(tagsRow);
-            section.appendChild(issueRow);
+            yPos += 5;
         }
 
-        report.appendChild(section);
+        yPos += 15;
     }
 
-    // ============ SUGGESTED COMPONENTS SECTION ============
-    const compSection = figma.createFrame();
-    compSection.name = '📦 Suggested Components';
-    compSection.fills = [{ type: 'SOLID', color: COLORS.cardBg }];
-    compSection.cornerRadius = 16;
-    compSection.layoutMode = 'VERTICAL';
-    compSection.primaryAxisSizingMode = 'AUTO';
-    compSection.counterAxisSizingMode = 'FIXED';
-    compSection.layoutAlign = 'STRETCH';
-    compSection.paddingTop = 20;
-    compSection.paddingBottom = 20;
-    compSection.paddingLeft = 20;
-    compSection.paddingRight = 20;
-    compSection.itemSpacing = 16;
-
-    const compTitle = figma.createText();
-    compTitle.characters = '📦 Suggested Components';
-    compTitle.fontSize = 18;
-    compTitle.fontName = { family: 'Roboto', style: 'Bold' };
-    compTitle.fills = [{ type: 'SOLID', color: COLORS.white }];
-    compSection.appendChild(compTitle);
-
-    // Collect unique components
-    const uniqueComps = new Set<string>();
-    for (const screen of screens) {
-        for (const issue of screen.issues) {
-            issue.suggestedComponents.forEach(c => {
-                const info = findComponentInfo(c);
-                if (info) uniqueComps.add(info.name);
-            });
-        }
-    }
-
-    // Component cards in a vertical list
-    for (const compName of uniqueComps) {
-        const info = componentLibrary.find(c => c.name === compName);
-        if (!info) continue;
-
-        const card = figma.createFrame();
-        card.name = info.name;
-        card.fills = [{ type: 'SOLID', color: { r: 0.15, g: 0.15, b: 0.17 } }];
-        card.cornerRadius = 10;
-        card.layoutMode = 'HORIZONTAL';
-        card.primaryAxisSizingMode = 'AUTO';
-        card.counterAxisSizingMode = 'FIXED';
-        card.layoutAlign = 'STRETCH';
-        card.primaryAxisAlignItems = 'SPACE_BETWEEN';
-        card.counterAxisAlignItems = 'CENTER';
-        card.paddingTop = 12;
-        card.paddingBottom = 12;
-        card.paddingLeft = 16;
-        card.paddingRight = 16;
-        card.itemSpacing = 16;
-
-        // Left: icon + name + desc
-        const left = figma.createFrame();
-        left.name = 'Info';
-        left.fills = [];
-        left.layoutMode = 'HORIZONTAL';
-        left.primaryAxisSizingMode = 'AUTO';
-        left.counterAxisSizingMode = 'AUTO';
-        left.counterAxisAlignItems = 'CENTER';
-        left.itemSpacing = 10;
-
-        const cardIcon = figma.createText();
-        cardIcon.characters = info.icon;
-        cardIcon.fontSize = 20;
-        left.appendChild(cardIcon);
-
-        const nameCol = figma.createFrame();
-        nameCol.name = 'Name';
-        nameCol.fills = [];
-        nameCol.layoutMode = 'VERTICAL';
-        nameCol.primaryAxisSizingMode = 'AUTO';
-        nameCol.counterAxisSizingMode = 'AUTO';
-        nameCol.itemSpacing = 2;
-
-        const cardName = figma.createText();
-        cardName.characters = info.name;
-        cardName.fontSize = 14;
-        cardName.fontName = { family: 'Roboto', style: 'Bold' };
-        cardName.fills = [{ type: 'SOLID', color: COLORS.white }];
-        nameCol.appendChild(cardName);
-
-        const cardDesc = figma.createText();
-        cardDesc.characters = info.description;
-        cardDesc.fontSize = 11;
-        cardDesc.fontName = { family: 'Roboto', style: 'Regular' };
-        cardDesc.fills = [{ type: 'SOLID', color: COLORS.gray }];
-        nameCol.appendChild(cardDesc);
-
-        left.appendChild(nameCol);
-        card.appendChild(left);
-
-        // Right: link button
-        const linkBtn = figma.createFrame();
-        linkBtn.name = 'Link';
-        linkBtn.fills = [{ type: 'SOLID', color: COLORS.accent }];
-        linkBtn.cornerRadius = 6;
-        linkBtn.layoutMode = 'HORIZONTAL';
-        linkBtn.primaryAxisSizingMode = 'AUTO';
-        linkBtn.counterAxisSizingMode = 'AUTO';
-        linkBtn.paddingTop = 6;
-        linkBtn.paddingBottom = 6;
-        linkBtn.paddingLeft = 12;
-        linkBtn.paddingRight = 12;
-
-        const linkText = figma.createText();
-        linkText.characters = '🔗 View';
-        linkText.fontSize = 11;
-        linkText.fontName = { family: 'Roboto', style: 'Bold' };
-        linkText.fills = [{ type: 'SOLID', color: COLORS.white }];
-        linkText.hyperlink = { type: 'URL', value: SHADCN_FILE_BASE + info.nodeId };
-        linkBtn.appendChild(linkText);
-
-        card.appendChild(linkBtn);
-        compSection.appendChild(card);
-    }
-
-    report.appendChild(compSection);
-
-    // ============ FOOTER ============
-    const footer = figma.createFrame();
-    footer.name = 'Footer';
-    footer.fills = [];
-    footer.layoutMode = 'HORIZONTAL';
-    footer.primaryAxisSizingMode = 'AUTO';
-    footer.counterAxisSizingMode = 'AUTO';
-    footer.itemSpacing = 6;
-
+    // Footer
     const footerText = figma.createText();
-    footerText.characters = 'Linked to';
-    footerText.fontSize = 12;
-    footerText.fontName = { family: 'Roboto', style: 'Regular' };
-    footerText.fills = [{ type: 'SOLID', color: COLORS.gray }];
-    footer.appendChild(footerText);
+    footerText.characters = 'Linked to shadcn/ui 💜';
+    footerText.fontSize = 11;
+    footerText.fills = [{ type: 'SOLID', color: { r: 0.6, g: 0.4, b: 0.9 } }];
+    footerText.x = 140;
+    footerText.y = yPos + 10;
+    footerText.hyperlink = { type: 'URL', value: 'https://www.figma.com/design/lmUgIGwdG2ZaVfvZzFuU2H/-shadcn-ui---Design-System--Community-' };
+    report.appendChild(footerText);
 
-    const footerLink = figma.createText();
-    footerLink.characters = 'shadcn/ui 💜';
-    footerLink.fontSize = 12;
-    footerLink.fontName = { family: 'Roboto', style: 'Bold' };
-    footerLink.fills = [{ type: 'SOLID', color: COLORS.accentLight }];
-    footerLink.hyperlink = { type: 'URL', value: 'https://www.figma.com/design/lmUgIGwdG2ZaVfvZzFuU2H/-shadcn-ui---Design-System--Community-' };
-    footer.appendChild(footerLink);
+    // Resize frame to fit content
+    report.resize(400, yPos + 50);
 
-    report.appendChild(footer);
-
-    // Add to page
     figma.currentPage.appendChild(report);
     figma.currentPage.selection = [report];
     figma.viewport.scrollAndZoomIntoView([report]);
@@ -528,15 +248,13 @@ async function createFullReport(): Promise<FrameNode | null> {
     return report;
 }
 
-// Handle messages from UI
-figma.ui.onmessage = async (msg: PluginMessage) => {
-    console.log('Received message:', msg.type);
-
+// Handle messages
+figma.ui.onmessage = async (msg: any) => {
     switch (msg.type) {
         case 'analyze': {
             const screens = exportSelectedFrames();
             if (screens.length === 0) {
-                figma.ui.postMessage({ type: 'error', payload: { message: 'Please select at least one frame' } });
+                figma.ui.postMessage({ type: 'error', payload: { message: 'Select at least one frame' } });
                 return;
             }
             figma.ui.postMessage({ type: 'screens-exported', payload: { screens, timestamp: new Date().toISOString() } });
@@ -544,39 +262,42 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         }
 
         case 'analysis-complete': {
-            const { result } = msg.payload as { result: AnalysisResult };
+            const { result } = msg.payload;
             lastAnalysisResult = result;
-
-            const enrichedScreens: EnrichedScreen[] = result.screens.map(screen => ({
+            enrichedScreensCache = result.screens.map((screen: any) => ({
                 ...screen,
-                issues: screen.issues.map(issue => {
-                    const matches: LibraryMatch[] = issue.suggestedComponents.map(comp => {
-                        const link = findComponentLink(comp);
-                        return link ? { name: comp, libraryUrl: link.url, libraryName: link.name } : { name: comp };
+                issues: screen.issues.map((issue: any) => {
+                    const matches = issue.suggestedComponents.map((comp: string) => {
+                        const info = findComponentInfo(comp);
+                        return info ? { name: comp, libraryUrl: SHADCN_BASE + info.nodeId, libraryName: info.name } : { name: comp };
                     });
                     return { ...issue, libraryMatches: matches };
                 })
             }));
-
-            enrichedScreensCache = enrichedScreens;
-            figma.ui.postMessage({ type: 'results-enriched', payload: { screens: enrichedScreens } });
+            figma.ui.postMessage({ type: 'results-enriched', payload: { screens: enrichedScreensCache } });
             figma.notify(`✅ ${result.totalIssues} issues found`, { timeout: 3000 });
             break;
         }
 
         case 'insert-placeholders':
         case 'generate-report': {
-            console.log('Creating report...');
-            const report = await createFullReport();
-            if (report) {
-                figma.notify(`✅ Report created!`, { timeout: 2000 });
+            try {
+                const report = await createSimpleReport();
+                if (report) {
+                    figma.notify(`✅ Report created!`, { timeout: 2000 });
+                }
+            } catch (err) {
+                figma.notify(`❌ Error: ${err}`, { error: true });
+                console.error(err);
             }
             break;
         }
 
         case 'load-library': {
-            const status = getLibraryStatus();
-            figma.ui.postMessage({ type: 'library-loaded', payload: { componentCount: status.available, components: status.components } });
+            figma.ui.postMessage({
+                type: 'library-loaded',
+                payload: { componentCount: componentLibrary.length, components: componentLibrary.map(c => c.name) }
+            });
             break;
         }
     }
@@ -584,6 +305,4 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 
 figma.on('selectionchange', sendSelectionUpdate);
 sendSelectionUpdate();
-
-const libStatus = getLibraryStatus();
-figma.ui.postMessage({ type: 'library-loaded', payload: { componentCount: libStatus.available, components: libStatus.components } });
+figma.ui.postMessage({ type: 'library-loaded', payload: { componentCount: componentLibrary.length, components: componentLibrary.map(c => c.name) } });
