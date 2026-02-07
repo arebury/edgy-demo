@@ -1,4 +1,4 @@
-// Main Plugin Code - Edgy Flow Analyzer with Design System Links
+// Main Plugin Code - Edgy Flow Analyzer with Component Suggestions
 
 import { ScreenData, NodeData, ConnectionData, AnalysisResult, PluginMessage, EdgeCaseIssue } from './types';
 
@@ -34,39 +34,115 @@ interface EnrichedScreen {
     missingStates: string[];
 }
 
-// Component to shadcn Figma node mapping
-interface ComponentLink {
+// Component data with visual representation info
+interface ComponentInfo {
     name: string;
     nodeId: string;
+    description: string;
+    color: RGB;
+    icon: string;
     aliases: string[];
 }
 
-const componentLinks: ComponentLink[] = [
-    { name: 'Alert', nodeId: '4-6598', aliases: ['alert', 'error-message', 'warning', 'notification'] },
-    { name: 'AlertDialog', nodeId: '4-6598', aliases: ['alert-dialog', 'confirm', 'confirmation'] },
-    { name: 'Button', nodeId: '13-1070', aliases: ['button', 'btn', 'cta', 'submit'] },
-    { name: 'Input', nodeId: '13-1256', aliases: ['input', 'text-field', 'form-field', 'textfield'] },
-    { name: 'Dialog', nodeId: '13-1026', aliases: ['dialog', 'modal', 'popup', 'overlay'] },
-    { name: 'Progress', nodeId: '13-1306', aliases: ['progress', 'loading-bar', 'progress-bar'] },
-    { name: 'Tabs', nodeId: '13-1356', aliases: ['tabs', 'tab-bar', 'navigation'] },
-    { name: 'Skeleton', nodeId: '13-1070', aliases: ['skeleton', 'loader', 'loading', 'placeholder'] },
-    { name: 'Toast', nodeId: '4-6598', aliases: ['toast', 'snackbar', 'message'] },
-    { name: 'Card', nodeId: '13-1026', aliases: ['card', 'container', 'box'] },
-    { name: 'Badge', nodeId: '13-1070', aliases: ['badge', 'tag', 'label', 'status'] },
+const componentLibrary: ComponentInfo[] = [
+    {
+        name: 'Alert',
+        nodeId: '4-6598',
+        description: 'Error messages, warnings, success notifications',
+        color: { r: 0.91, g: 0.3, b: 0.24 },
+        icon: '⚠️',
+        aliases: ['alert', 'error-message', 'warning', 'notification']
+    },
+    {
+        name: 'AlertDialog',
+        nodeId: '4-6598',
+        description: 'Confirmation dialogs, destructive action warnings',
+        color: { r: 0.91, g: 0.3, b: 0.24 },
+        icon: '🗨️',
+        aliases: ['alert-dialog', 'confirm', 'confirmation']
+    },
+    {
+        name: 'Button',
+        nodeId: '13-1070',
+        description: 'Primary, secondary, destructive actions',
+        color: { r: 0.486, g: 0.227, b: 0.929 },
+        icon: '🔘',
+        aliases: ['button', 'btn', 'cta', 'submit']
+    },
+    {
+        name: 'Input',
+        nodeId: '13-1256',
+        description: 'Text fields, form inputs with validation',
+        color: { r: 0.2, g: 0.6, b: 0.86 },
+        icon: '📝',
+        aliases: ['input', 'text-field', 'form-field', 'textfield']
+    },
+    {
+        name: 'Dialog',
+        nodeId: '13-1026',
+        description: 'Modal windows, popups',
+        color: { r: 0.4, g: 0.4, b: 0.5 },
+        icon: '📋',
+        aliases: ['dialog', 'modal', 'popup', 'overlay']
+    },
+    {
+        name: 'Progress',
+        nodeId: '13-1306',
+        description: 'Loading bars, progress indicators',
+        color: { r: 0.2, g: 0.7, b: 0.4 },
+        icon: '⏳',
+        aliases: ['progress', 'loading-bar', 'progress-bar']
+    },
+    {
+        name: 'Skeleton',
+        nodeId: '13-1070',
+        description: 'Loading placeholders',
+        color: { r: 0.5, g: 0.5, b: 0.55 },
+        icon: '🦴',
+        aliases: ['skeleton', 'loader', 'loading', 'placeholder']
+    },
+    {
+        name: 'Toast',
+        nodeId: '4-6598',
+        description: 'Temporary notifications',
+        color: { r: 0.2, g: 0.7, b: 0.4 },
+        icon: '🍞',
+        aliases: ['toast', 'snackbar', 'message']
+    },
+    {
+        name: 'Card',
+        nodeId: '13-1026',
+        description: 'Content containers, empty states',
+        color: { r: 0.3, g: 0.3, b: 0.35 },
+        icon: '📦',
+        aliases: ['card', 'container', 'box']
+    },
+    {
+        name: 'Badge',
+        nodeId: '13-1070',
+        description: 'Status indicators, tags',
+        color: { r: 0.95, g: 0.61, b: 0.07 },
+        icon: '🏷️',
+        aliases: ['badge', 'tag', 'label', 'status']
+    },
 ];
+
+// Find component info by name
+function findComponentInfo(suggestedName: string): ComponentInfo | null {
+    const normalized = suggestedName.toLowerCase();
+    return componentLibrary.find(c =>
+        c.name.toLowerCase() === normalized ||
+        c.aliases.some(a => normalized.includes(a))
+    ) || null;
+}
 
 // Find component link by name
 function findComponentLink(suggestedName: string): { name: string; url: string } | null {
-    const normalized = suggestedName.toLowerCase();
-    const link = componentLinks.find(c =>
-        c.name.toLowerCase() === normalized ||
-        c.aliases.some(a => normalized.includes(a))
-    );
-
-    if (link) {
+    const info = findComponentInfo(suggestedName);
+    if (info) {
         return {
-            name: link.name,
-            url: SHADCN_FILE_BASE + link.nodeId
+            name: info.name,
+            url: SHADCN_FILE_BASE + info.nodeId
         };
     }
     return null;
@@ -75,8 +151,8 @@ function findComponentLink(suggestedName: string): { name: string; url: string }
 // Get library status for UI
 function getLibraryStatus(): { available: number; components: string[] } {
     return {
-        available: componentLinks.length,
-        components: componentLinks.map(c => c.name)
+        available: componentLibrary.length,
+        components: componentLibrary.map(c => c.name)
     };
 }
 
@@ -164,8 +240,8 @@ function sendSelectionUpdate(): void {
 const COLORS = {
     bg: { r: 0.08, g: 0.08, b: 0.1 },
     cardBg: { r: 0.12, g: 0.12, b: 0.14 },
-    accent: { r: 0.486, g: 0.227, b: 0.929 }, // Purple #7c3aed
-    accentLight: { r: 0.659, g: 0.333, b: 0.969 }, // Light purple
+    accent: { r: 0.486, g: 0.227, b: 0.929 },
+    accentLight: { r: 0.659, g: 0.333, b: 0.969 },
     critical: { r: 0.91, g: 0.3, b: 0.24 },
     warning: { r: 0.95, g: 0.61, b: 0.07 },
     info: { r: 0.2, g: 0.6, b: 0.86 },
@@ -174,14 +250,243 @@ const COLORS = {
     lightGray: { r: 0.85, g: 0.85, b: 0.88 },
 };
 
-// Create beautiful report frame
+// Create a single component card
+async function createComponentCard(info: ComponentInfo, forIssue: string): Promise<FrameNode> {
+    const card = figma.createFrame();
+    card.name = `${info.icon} ${info.name}`;
+    card.fills = [{ type: 'SOLID', color: COLORS.cardBg }];
+    card.cornerRadius = 12;
+    card.layoutMode = 'VERTICAL';
+    card.itemSpacing = 8;
+    card.paddingTop = 16;
+    card.paddingBottom = 16;
+    card.paddingLeft = 16;
+    card.paddingRight = 16;
+    card.layoutSizingHorizontal = 'FIXED';
+    card.layoutSizingVertical = 'HUG';
+    card.resize(160, 100);
+
+    // Color accent bar at top
+    const accent = figma.createFrame();
+    accent.name = 'Accent';
+    accent.resize(128, 4);
+    accent.fills = [{ type: 'SOLID', color: info.color }];
+    accent.cornerRadius = 2;
+    accent.layoutSizingHorizontal = 'FILL';
+    card.appendChild(accent);
+
+    // Icon and name row
+    const nameRow = figma.createFrame();
+    nameRow.name = 'Name';
+    nameRow.fills = [];
+    nameRow.layoutMode = 'HORIZONTAL';
+    nameRow.itemSpacing = 6;
+    nameRow.layoutSizingHorizontal = 'FILL';
+    nameRow.layoutSizingVertical = 'HUG';
+
+    const icon = figma.createText();
+    icon.characters = info.icon;
+    icon.fontSize = 16;
+    nameRow.appendChild(icon);
+
+    const name = figma.createText();
+    name.characters = info.name;
+    name.fontSize = 14;
+    name.fontName = { family: 'Inter', style: 'Bold' };
+    name.fills = [{ type: 'SOLID', color: COLORS.white }];
+    nameRow.appendChild(name);
+
+    card.appendChild(nameRow);
+
+    // Description
+    const desc = figma.createText();
+    desc.characters = info.description;
+    desc.fontSize = 10;
+    desc.fontName = { family: 'Inter', style: 'Regular' };
+    desc.fills = [{ type: 'SOLID', color: COLORS.gray }];
+    desc.layoutSizingHorizontal = 'FILL';
+    desc.textAutoResize = 'HEIGHT';
+    card.appendChild(desc);
+
+    // For issue label
+    const issueLabel = figma.createText();
+    issueLabel.characters = `← ${forIssue}`;
+    issueLabel.fontSize = 9;
+    issueLabel.fontName = { family: 'Inter', style: 'Medium' };
+    issueLabel.fills = [{ type: 'SOLID', color: info.color }];
+    card.appendChild(issueLabel);
+
+    // Link text
+    const link = figma.createText();
+    link.characters = '🔗 View in shadcn';
+    link.fontSize = 10;
+    link.fontName = { family: 'Inter', style: 'SemiBold' };
+    link.fills = [{ type: 'SOLID', color: COLORS.accentLight }];
+    link.hyperlink = { type: 'URL', value: SHADCN_FILE_BASE + info.nodeId };
+    card.appendChild(link);
+
+    return card;
+}
+
+// Create Suggested Components frame
+async function createSuggestedComponentsFrame(): Promise<FrameNode | null> {
+    if (!lastAnalysisResult || enrichedScreensCache.length === 0) {
+        figma.notify('⚠️ Please run analysis first', { error: true });
+        return null;
+    }
+
+    await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'SemiBold' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+
+    // Collect unique components needed
+    const componentsNeeded = new Map<string, { info: ComponentInfo; issues: string[] }>();
+
+    for (const screen of enrichedScreensCache) {
+        for (const issue of screen.issues) {
+            for (const comp of issue.suggestedComponents) {
+                const info = findComponentInfo(comp);
+                if (info) {
+                    const existing = componentsNeeded.get(info.name);
+                    if (existing) {
+                        existing.issues.push(issue.name);
+                    } else {
+                        componentsNeeded.set(info.name, { info, issues: [issue.name] });
+                    }
+                }
+            }
+        }
+    }
+
+    if (componentsNeeded.size === 0) {
+        figma.notify('✅ No components needed!', { timeout: 2000 });
+        return null;
+    }
+
+    // Position to the right of selected frames
+    const selectedFrames = getSelectedFrames();
+    let maxX = 0, minY = 0;
+    selectedFrames.forEach(f => {
+        if (f.x + f.width > maxX) maxX = f.x + f.width;
+        if (minY === 0 || f.y < minY) minY = f.y;
+    });
+
+    // Main container
+    const container = figma.createFrame();
+    container.name = '📦 Suggested Components';
+    container.x = maxX + 100;
+    container.y = minY;
+    container.fills = [{ type: 'SOLID', color: COLORS.bg }];
+    container.cornerRadius = 24;
+    container.layoutMode = 'VERTICAL';
+    container.itemSpacing = 20;
+    container.paddingTop = 24;
+    container.paddingBottom = 24;
+    container.paddingLeft = 24;
+    container.paddingRight = 24;
+    container.layoutSizingHorizontal = 'HUG';
+    container.layoutSizingVertical = 'HUG';
+
+    // Header
+    const header = figma.createFrame();
+    header.name = 'Header';
+    header.fills = [];
+    header.layoutMode = 'VERTICAL';
+    header.itemSpacing = 4;
+    header.layoutSizingHorizontal = 'HUG';
+    header.layoutSizingVertical = 'HUG';
+
+    const titleRow = figma.createFrame();
+    titleRow.name = 'Title';
+    titleRow.fills = [];
+    titleRow.layoutMode = 'HORIZONTAL';
+    titleRow.itemSpacing = 8;
+    titleRow.layoutSizingHorizontal = 'HUG';
+    titleRow.layoutSizingVertical = 'HUG';
+
+    const icon = figma.createText();
+    icon.characters = '📦';
+    icon.fontSize = 24;
+    titleRow.appendChild(icon);
+
+    const title = figma.createText();
+    title.characters = 'Suggested Components';
+    title.fontSize = 24;
+    title.fontName = { family: 'Inter', style: 'Bold' };
+    title.fills = [{ type: 'SOLID', color: COLORS.white }];
+    titleRow.appendChild(title);
+
+    header.appendChild(titleRow);
+
+    const subtitle = figma.createText();
+    subtitle.characters = `${componentsNeeded.size} components from shadcn/ui • Click links to view`;
+    subtitle.fontSize = 12;
+    subtitle.fontName = { family: 'Inter', style: 'Regular' };
+    subtitle.fills = [{ type: 'SOLID', color: COLORS.gray }];
+    header.appendChild(subtitle);
+
+    container.appendChild(header);
+
+    // Components grid
+    const grid = figma.createFrame();
+    grid.name = 'Components Grid';
+    grid.fills = [];
+    grid.layoutMode = 'HORIZONTAL';
+    grid.layoutWrap = 'WRAP';
+    grid.itemSpacing = 12;
+    grid.counterAxisSpacing = 12;
+    grid.layoutSizingHorizontal = 'HUG';
+    grid.layoutSizingVertical = 'HUG';
+    grid.maxWidth = 520;
+
+    for (const [, data] of componentsNeeded) {
+        const card = await createComponentCard(data.info, data.issues[0]);
+        grid.appendChild(card);
+    }
+
+    container.appendChild(grid);
+
+    // Footer
+    const footer = figma.createFrame();
+    footer.name = 'Footer';
+    footer.fills = [];
+    footer.layoutMode = 'HORIZONTAL';
+    footer.itemSpacing = 4;
+    footer.layoutSizingHorizontal = 'HUG';
+    footer.layoutSizingVertical = 'HUG';
+
+    const footerText = figma.createText();
+    footerText.characters = 'From';
+    footerText.fontSize = 11;
+    footerText.fontName = { family: 'Inter', style: 'Regular' };
+    footerText.fills = [{ type: 'SOLID', color: COLORS.gray }];
+    footer.appendChild(footerText);
+
+    const footerLink = figma.createText();
+    footerLink.characters = 'shadcn/ui Design System 💜';
+    footerLink.fontSize = 11;
+    footerLink.fontName = { family: 'Inter', style: 'SemiBold' };
+    footerLink.fills = [{ type: 'SOLID', color: COLORS.accentLight }];
+    footerLink.hyperlink = { type: 'URL', value: 'https://www.figma.com/design/lmUgIGwdG2ZaVfvZzFuU2H/-shadcn-ui---Design-System--Community-' };
+    footer.appendChild(footerLink);
+
+    container.appendChild(footer);
+
+    figma.currentPage.appendChild(container);
+    figma.currentPage.selection = [container];
+    figma.viewport.scrollAndZoomIntoView([container]);
+
+    return container;
+}
+
+// Create beautiful report frame with issues
 async function createReportFrame(): Promise<FrameNode | null> {
     if (!lastAnalysisResult || enrichedScreensCache.length === 0) {
         figma.notify('⚠️ Please run analysis first', { error: true });
         return null;
     }
 
-    // Load fonts
     await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
     await figma.loadFontAsync({ family: 'Inter', style: 'SemiBold' });
     await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
@@ -190,10 +495,8 @@ async function createReportFrame(): Promise<FrameNode | null> {
     const result = lastAnalysisResult;
     const screens = enrichedScreensCache;
 
-    // Find the rightmost frame to position report
     const selectedFrames = getSelectedFrames();
-    let maxX = 0;
-    let minY = 0;
+    let maxX = 0, minY = 0;
     selectedFrames.forEach(f => {
         if (f.x + f.width > maxX) maxX = f.x + f.width;
         if (minY === 0 || f.y < minY) minY = f.y;
@@ -216,7 +519,7 @@ async function createReportFrame(): Promise<FrameNode | null> {
     report.layoutSizingVertical = 'HUG';
     report.minWidth = 400;
 
-    // ========== HEADER ==========
+    // Header
     const header = figma.createFrame();
     header.name = 'Header';
     header.fills = [];
@@ -236,7 +539,6 @@ async function createReportFrame(): Promise<FrameNode | null> {
     const logo = figma.createText();
     logo.characters = '⚡';
     logo.fontSize = 28;
-    logo.fontName = { family: 'Inter', style: 'Bold' };
     titleRow.appendChild(logo);
 
     const title = figma.createText();
@@ -257,7 +559,7 @@ async function createReportFrame(): Promise<FrameNode | null> {
 
     report.appendChild(header);
 
-    // ========== SUMMARY STATS ==========
+    // Stats row
     const statsRow = figma.createFrame();
     statsRow.name = 'Stats';
     statsRow.fills = [{ type: 'SOLID', color: COLORS.cardBg }];
@@ -306,7 +608,7 @@ async function createReportFrame(): Promise<FrameNode | null> {
 
     report.appendChild(statsRow);
 
-    // ========== ISSUES BY SCREEN ==========
+    // Issues by screen
     for (const screen of screens) {
         if (screen.issues.length === 0) continue;
 
@@ -323,7 +625,6 @@ async function createReportFrame(): Promise<FrameNode | null> {
         screenSection.layoutSizingHorizontal = 'FILL';
         screenSection.layoutSizingVertical = 'HUG';
 
-        // Screen title
         const screenTitle = figma.createText();
         screenTitle.characters = `📱 ${screen.screenName}`;
         screenTitle.fontSize = 16;
@@ -331,7 +632,6 @@ async function createReportFrame(): Promise<FrameNode | null> {
         screenTitle.fills = [{ type: 'SOLID', color: COLORS.white }];
         screenSection.appendChild(screenTitle);
 
-        // Issues
         for (const issue of screen.issues) {
             const issueRow = figma.createFrame();
             issueRow.name = issue.name;
@@ -341,7 +641,6 @@ async function createReportFrame(): Promise<FrameNode | null> {
             issueRow.layoutSizingHorizontal = 'FILL';
             issueRow.layoutSizingVertical = 'HUG';
 
-            // Issue header row
             const issueHeader = figma.createFrame();
             issueHeader.name = 'Issue Header';
             issueHeader.fills = [];
@@ -364,7 +663,7 @@ async function createReportFrame(): Promise<FrameNode | null> {
 
             issueRow.appendChild(issueHeader);
 
-            // Component links row
+            // Component links in a row
             const componentsRow = figma.createFrame();
             componentsRow.name = 'Components';
             componentsRow.fills = [];
@@ -372,44 +671,39 @@ async function createReportFrame(): Promise<FrameNode | null> {
             componentsRow.itemSpacing = 8;
             componentsRow.layoutSizingHorizontal = 'HUG';
             componentsRow.layoutSizingVertical = 'HUG';
-            componentsRow.paddingLeft = 22; // Indent under icon
+            componentsRow.paddingLeft = 22;
 
-            const matches = issue.libraryMatches || issue.suggestedComponents.map(c => ({ name: c }));
+            for (const comp of issue.suggestedComponents) {
+                const info = findComponentInfo(comp);
+                if (!info) continue;
 
-            for (const match of matches) {
-                const link = findComponentLink(match.name);
-
-                const componentTag = figma.createFrame();
-                componentTag.name = match.name;
-                componentTag.fills = [{ type: 'SOLID', color: COLORS.accent }];
-                componentTag.cornerRadius = 6;
-                componentTag.layoutMode = 'HORIZONTAL';
-                componentTag.itemSpacing = 4;
-                componentTag.paddingTop = 4;
-                componentTag.paddingBottom = 4;
-                componentTag.paddingLeft = 8;
-                componentTag.paddingRight = 8;
-                componentTag.layoutSizingHorizontal = 'HUG';
-                componentTag.layoutSizingVertical = 'HUG';
+                const tag = figma.createFrame();
+                tag.name = info.name;
+                tag.fills = [{ type: 'SOLID', color: COLORS.accent }];
+                tag.cornerRadius = 6;
+                tag.layoutMode = 'HORIZONTAL';
+                tag.itemSpacing = 4;
+                tag.paddingTop = 4;
+                tag.paddingBottom = 4;
+                tag.paddingLeft = 8;
+                tag.paddingRight = 8;
+                tag.layoutSizingHorizontal = 'HUG';
+                tag.layoutSizingVertical = 'HUG';
 
                 const tagIcon = figma.createText();
                 tagIcon.characters = '🔗';
                 tagIcon.fontSize = 10;
-                componentTag.appendChild(tagIcon);
+                tag.appendChild(tagIcon);
 
                 const tagName = figma.createText();
-                tagName.characters = match.libraryName || match.name;
+                tagName.characters = info.name;
                 tagName.fontSize = 10;
                 tagName.fontName = { family: 'Inter', style: 'SemiBold' };
                 tagName.fills = [{ type: 'SOLID', color: COLORS.white }];
-                componentTag.appendChild(tagName);
+                tagName.hyperlink = { type: 'URL', value: SHADCN_FILE_BASE + info.nodeId };
+                tag.appendChild(tagName);
 
-                // Add hyperlink if available
-                if (link) {
-                    tagName.hyperlink = { type: 'URL', value: link.url };
-                }
-
-                componentsRow.appendChild(componentTag);
+                componentsRow.appendChild(tag);
             }
 
             issueRow.appendChild(componentsRow);
@@ -419,39 +713,7 @@ async function createReportFrame(): Promise<FrameNode | null> {
         report.appendChild(screenSection);
     }
 
-    // ========== FLOW ISSUES ==========
-    if (result.flowIssues.deadEnds.length > 0) {
-        const flowSection = figma.createFrame();
-        flowSection.name = 'Flow Issues';
-        flowSection.fills = [{ type: 'SOLID', color: COLORS.cardBg }];
-        flowSection.cornerRadius = 16;
-        flowSection.layoutMode = 'VERTICAL';
-        flowSection.itemSpacing = 12;
-        flowSection.paddingTop = 20;
-        flowSection.paddingBottom = 20;
-        flowSection.paddingLeft = 20;
-        flowSection.paddingRight = 20;
-        flowSection.layoutSizingHorizontal = 'FILL';
-        flowSection.layoutSizingVertical = 'HUG';
-
-        const flowTitle = figma.createText();
-        flowTitle.characters = '🧭 Flow Issues';
-        flowTitle.fontSize = 16;
-        flowTitle.fontName = { family: 'Inter', style: 'SemiBold' };
-        flowTitle.fills = [{ type: 'SOLID', color: COLORS.white }];
-        flowSection.appendChild(flowTitle);
-
-        const deadEndsText = figma.createText();
-        deadEndsText.characters = `🚫 Dead ends: ${result.flowIssues.deadEnds.join(', ')}`;
-        deadEndsText.fontSize = 12;
-        deadEndsText.fontName = { family: 'Inter', style: 'Regular' };
-        deadEndsText.fills = [{ type: 'SOLID', color: COLORS.warning }];
-        flowSection.appendChild(deadEndsText);
-
-        report.appendChild(flowSection);
-    }
-
-    // ========== FOOTER ==========
+    // Footer
     const footer = figma.createFrame();
     footer.name = 'Footer';
     footer.fills = [];
@@ -459,7 +721,6 @@ async function createReportFrame(): Promise<FrameNode | null> {
     footer.itemSpacing = 8;
     footer.layoutSizingHorizontal = 'HUG';
     footer.layoutSizingVertical = 'HUG';
-    footer.primaryAxisAlignItems = 'CENTER';
 
     const footerText = figma.createText();
     footerText.characters = 'Linked to';
@@ -478,7 +739,6 @@ async function createReportFrame(): Promise<FrameNode | null> {
 
     report.appendChild(footer);
 
-    // Add to page and select
     figma.currentPage.appendChild(report);
     figma.currentPage.selection = [report];
     figma.viewport.scrollAndZoomIntoView([report]);
@@ -500,7 +760,6 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
                 return;
             }
 
-            // Send screen data to UI for analysis
             figma.ui.postMessage({
                 type: 'screens-exported',
                 payload: { screens, timestamp: new Date().toISOString() }
@@ -512,7 +771,6 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
             const resultPayload = msg.payload as { result: AnalysisResult };
             lastAnalysisResult = resultPayload.result;
 
-            // Enrich results with library component links
             const enrichedScreens: EnrichedScreen[] = resultPayload.result.screens.map(screen => ({
                 ...screen,
                 issues: screen.issues.map(issue => {
@@ -550,9 +808,18 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         }
 
         case 'insert-placeholders': {
+            // Create both the report AND the component suggestions
             const report = await createReportFrame();
             if (report) {
-                figma.notify(`✅ Created report frame`, { timeout: 2000 });
+                // Position component suggestions below report
+                const components = await createSuggestedComponentsFrame();
+                if (components) {
+                    components.x = report.x;
+                    components.y = report.y + report.height + 40;
+                    figma.currentPage.selection = [report, components];
+                    figma.viewport.scrollAndZoomIntoView([report, components]);
+                }
+                figma.notify(`✅ Created report + suggested components!`, { timeout: 2000 });
             }
             break;
         }
