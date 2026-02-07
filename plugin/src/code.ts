@@ -84,6 +84,19 @@ async function createSimpleReport(): Promise<FrameNode | null> {
         return null;
     }
 
+    // CRITICAL: Load fonts FIRST before any text creation
+    try {
+        await figma.loadFontAsync({ family: 'Roboto', style: 'Regular' });
+    } catch (e) {
+        // Fallback to system font if Roboto not available
+        try {
+            await figma.loadFontAsync({ family: 'Arial', style: 'Regular' });
+        } catch (e2) {
+            figma.notify('⚠️ Could not load fonts', { error: true });
+            return null;
+        }
+    }
+
     const result = lastAnalysisResult;
     const screens = enrichedScreensCache;
 
@@ -119,7 +132,6 @@ async function createSimpleReport(): Promise<FrameNode | null> {
     report.appendChild(titleBg);
 
     const titleText = figma.createText();
-    await figma.loadFontAsync({ family: 'Roboto', style: 'Regular' });
     titleText.characters = `⚡ Edge Case Report - ${result.totalIssues} issues`;
     titleText.fontSize = 18;
     titleText.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
