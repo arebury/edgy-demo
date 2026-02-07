@@ -3,8 +3,18 @@ import { createRoot } from 'react-dom/client';
 import { AnalysisResult, EdgeCaseIssue, ScreenData } from './types';
 import './styles.css';
 
-// Demo mode: Local analysis without GitHub
-const DEMO_MODE = true;
+// Extended issue with library match
+interface EnrichedIssue extends EdgeCaseIssue {
+    libraryMatches?: Array<{ name: string; libraryKey?: string; libraryName?: string }>;
+}
+
+interface EnrichedScreen {
+    screenId: string;
+    screenName: string;
+    detectedPatterns: string[];
+    issues: EnrichedIssue[];
+    missingStates: string[];
+}
 
 // Category labels
 const severityIcons = {
@@ -17,32 +27,38 @@ const severityIcons = {
 function analyzeLocally(screens: ScreenData[]): AnalysisResult {
     const patterns = {
         'form-submission': {
-            keywords: ['form', 'submit', 'save', 'input', 'field', 'login', 'signup'],
+            keywords: ['form', 'submit', 'save', 'input', 'field', 'login', 'signup', 'register', 'email', 'password'],
             edgeCases: [
-                { id: 'form-validation-error', name: 'Validation Error State', severity: 'critical' as const, suggestedComponents: ['Alert', 'Input (error)'] },
-                { id: 'form-loading', name: 'Submission Loading', severity: 'critical' as const, suggestedComponents: ['Button (loading)'] },
+                { id: 'form-validation-error', name: 'Validation Error State', severity: 'critical' as const, suggestedComponents: ['Alert', 'Input'] },
+                { id: 'form-loading', name: 'Submission Loading', severity: 'critical' as const, suggestedComponents: ['Button', 'Progress'] },
                 { id: 'form-success', name: 'Success Confirmation', severity: 'warning' as const, suggestedComponents: ['Toast', 'Alert'] }
             ]
         },
         'data-list': {
-            keywords: ['list', 'table', 'grid', 'feed', 'items', 'cards'],
+            keywords: ['list', 'table', 'grid', 'feed', 'items', 'cards', 'dashboard'],
             edgeCases: [
-                { id: 'list-empty', name: 'Empty State', severity: 'critical' as const, suggestedComponents: ['EmptyState', 'Card'] },
+                { id: 'list-empty', name: 'Empty State', severity: 'critical' as const, suggestedComponents: ['Card'] },
                 { id: 'list-loading', name: 'Loading State', severity: 'critical' as const, suggestedComponents: ['Skeleton'] },
-                { id: 'list-error', name: 'Error State', severity: 'critical' as const, suggestedComponents: ['Alert (error)'] }
+                { id: 'list-error', name: 'Error State', severity: 'critical' as const, suggestedComponents: ['Alert'] }
             ]
         },
         'search-filter': {
             keywords: ['search', 'filter', 'query', 'find'],
             edgeCases: [
-                { id: 'search-no-results', name: 'No Results Found', severity: 'critical' as const, suggestedComponents: ['EmptyState'] },
+                { id: 'search-no-results', name: 'No Results Found', severity: 'critical' as const, suggestedComponents: ['Card'] },
                 { id: 'search-loading', name: 'Search Loading', severity: 'warning' as const, suggestedComponents: ['Skeleton'] }
             ]
         },
         'destructive-action': {
-            keywords: ['delete', 'remove', 'clear', 'discard'],
+            keywords: ['delete', 'remove', 'clear', 'discard', 'cancel'],
             edgeCases: [
                 { id: 'destructive-confirmation', name: 'Confirmation Dialog', severity: 'critical' as const, suggestedComponents: ['AlertDialog'] }
+            ]
+        },
+        'navigation': {
+            keywords: ['menu', 'nav', 'sidebar', 'header', 'home'],
+            edgeCases: [
+                { id: 'nav-offline', name: 'Offline State', severity: 'info' as const, suggestedComponents: ['Alert', 'Toast'] }
             ]
         }
     };
@@ -55,13 +71,11 @@ function analyzeLocally(screens: ScreenData[]): AnalysisResult {
         const detectedPatterns: string[] = [];
         const issues: EdgeCaseIssue[] = [];
 
-        // Detect patterns and check for missing edge cases
         for (const [patternId, pattern] of Object.entries(patterns)) {
             const hasPattern = pattern.keywords.some(kw => allText.includes(kw));
             if (hasPattern) {
                 detectedPatterns.push(patternId);
 
-                // Check if edge cases exist
                 for (const edgeCase of pattern.edgeCases) {
                     const hasEdgeCase =
                         allText.includes('error') ||
@@ -69,7 +83,6 @@ function analyzeLocally(screens: ScreenData[]): AnalysisResult {
                         allText.includes('empty') ||
                         allText.includes('skeleton');
 
-                    // Simple heuristic: if doesn't have obvious edge case indicators, flag it
                     if (!hasEdgeCase) {
                         issues.push({
                             id: `${edgeCase.id}-${screen.id}`,
@@ -118,8 +131,11 @@ function App() {
     const [frameNames, setFrameNames] = useState<string[]>([]);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [result, setResult] = useState<AnalysisResult | null>(null);
+    const [enrichedScreens, setEnrichedScreens] = useState<EnrichedScreen[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'summary' | 'screens'>('summary');
+    const [libraryStatus, setLibraryStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+    const [libraryCount, setLibraryCount] = useState(0);
 
     useEffect(() => {
         window.onmessage = (event) => {
@@ -132,20 +148,32 @@ function App() {
                     setFrameNames(msg.payload.frameNames);
                     setError(null);
                     break;
-                case 'screens-exported':
-                    // In demo mode, analyze locally
-                    if (DEMO_MODE) {
-                        const analysisResult = analyzeLocally(msg.payload.screens);
-                        setResult(analysisResult);
-                        setIsAnalyzing(false);
-                        parent.postMessage({
-                            pluginMessage: {
-                                type: 'analysis-complete',
-                                payload: { result: analysisResult }
-                            }
-                        }, '*');
-                    }
+
+                case 'library-loaded':
+                    setLibraryStatus('loaded');
+                    setLibraryCount(msg.payload.componentCount);
                     break;
+
+                case 'library-error':
+                    setLibraryStatus('error');
+                    break;
+
+                case 'screens-exported':
+                    const analysisResult = analyzeLocally(msg.payload.screens);
+                    setResult(analysisResult);
+                    setIsAnalyzing(false);
+                    parent.postMessage({
+                        pluginMessage: {
+                            type: 'analysis-complete',
+                            payload: { result: analysisResult }
+                        }
+                    }, '*');
+                    break;
+
+                case 'results-enriched':
+                    setEnrichedScreens(msg.payload.screens);
+                    break;
+
                 case 'error':
                     setError(msg.payload.message);
                     setIsAnalyzing(false);
@@ -158,6 +186,7 @@ function App() {
         setIsAnalyzing(true);
         setError(null);
         setResult(null);
+        setEnrichedScreens([]);
         parent.postMessage({ pluginMessage: { type: 'analyze' } }, '*');
     };
 
@@ -165,13 +194,23 @@ function App() {
         parent.postMessage({ pluginMessage: { type: 'insert-placeholders' } }, '*');
     };
 
-    const groupIssuesBySeverity = (issues: EdgeCaseIssue[]) => {
-        return {
-            critical: issues.filter(i => i.severity === 'critical'),
-            warning: issues.filter(i => i.severity === 'warning'),
-            info: issues.filter(i => i.severity === 'info')
-        };
+    const handleInsertComponent = (componentKey: string, screenId: string, index: number) => {
+        parent.postMessage({
+            pluginMessage: {
+                type: 'insert-component',
+                payload: { componentKey, screenId, index }
+            }
+        }, '*');
     };
+
+    const handleReloadLibrary = () => {
+        setLibraryStatus('loading');
+        parent.postMessage({ pluginMessage: { type: 'load-library' } }, '*');
+    };
+
+    // Use enriched screens if available, otherwise fall back to regular result
+    const displayScreens = enrichedScreens.length > 0 ? enrichedScreens : result?.screens || [];
+    const allIssues = displayScreens.flatMap(s => s.issues);
 
     return (
         <div className="container">
@@ -182,6 +221,21 @@ function App() {
                 </div>
                 <p className="subtitle">Find missing edge cases in your flows</p>
             </header>
+
+            {/* Library Status */}
+            <div className="library-status">
+                {libraryStatus === 'loading' && <span>🔄 Loading design system...</span>}
+                {libraryStatus === 'loaded' && (
+                    <span className="library-connected">
+                        📚 {libraryCount} components available
+                    </span>
+                )}
+                {libraryStatus === 'error' && (
+                    <span className="library-error" onClick={handleReloadLibrary}>
+                        ⚠️ Library not connected - Click to retry
+                    </span>
+                )}
+            </div>
 
             <section className="selection-info">
                 <div className="stat-box">
@@ -254,13 +308,13 @@ function App() {
                     <section className="results-list">
                         {activeTab === 'summary' && (
                             <>
-                                {result.screens.flatMap(s => s.issues).length === 0 ? (
+                                {allIssues.length === 0 ? (
                                     <div className="no-issues">
                                         <span className="celebration">🎉</span>
                                         <p>Great job! No edge case issues detected.</p>
                                     </div>
                                 ) : (
-                                    result.screens.flatMap(s => s.issues)
+                                    allIssues
                                         .sort((a, b) => {
                                             const order = { critical: 0, warning: 1, info: 2 };
                                             return order[a.severity] - order[b.severity];
@@ -272,9 +326,21 @@ function App() {
                                                     <span className="issue-title">{issue.name}</span>
                                                 </div>
                                                 <p className="issue-screen">📍 {issue.screenName}</p>
-                                                <p className="issue-suggestion">
-                                                    💡 Use: {issue.suggestedComponents.join(', ')}
-                                                </p>
+                                                <div className="issue-components">
+                                                    {((issue as EnrichedIssue).libraryMatches || issue.suggestedComponents.map(c => ({ name: c }))).map((match, j) => (
+                                                        <div key={j} className="component-suggestion">
+                                                            <span className="component-name">💡 {match.name}</span>
+                                                            {match.libraryKey && (
+                                                                <button
+                                                                    className="btn-insert"
+                                                                    onClick={() => handleInsertComponent(match.libraryKey!, issue.screenId, j)}
+                                                                >
+                                                                    📦 Insert
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
                                         ))
                                 )}
@@ -283,7 +349,7 @@ function App() {
 
                         {activeTab === 'screens' && (
                             <>
-                                {result.screens.map((screen) => (
+                                {displayScreens.map((screen) => (
                                     <div key={screen.screenId} className="screen-group">
                                         <h4 className="screen-title">
                                             📱 {screen.screenName}
@@ -296,10 +362,25 @@ function App() {
                                         ) : (
                                             screen.issues.map((issue, i) => (
                                                 <div key={i} className={`issue-card small ${issue.severity}`}>
-                                                    <span className="severity-icon">{severityIcons[issue.severity]}</span>
-                                                    <div>
+                                                    <div className="issue-row">
+                                                        <span className="severity-icon">{severityIcons[issue.severity]}</span>
                                                         <span className="issue-title">{issue.name}</span>
-                                                        <span className="suggestion-inline">→ {issue.suggestedComponents[0]}</span>
+                                                    </div>
+                                                    <div className="insert-buttons">
+                                                        {((issue as EnrichedIssue).libraryMatches || issue.suggestedComponents.map(c => ({ name: c }))).map((match, j) => (
+                                                            match.libraryKey ? (
+                                                                <button
+                                                                    key={j}
+                                                                    className="btn-insert-small"
+                                                                    onClick={() => handleInsertComponent(match.libraryKey!, screen.screenId, j)}
+                                                                    title={`Insert ${match.libraryName || match.name}`}
+                                                                >
+                                                                    📦 {match.name}
+                                                                </button>
+                                                            ) : (
+                                                                <span key={j} className="component-tag">{match.name}</span>
+                                                            )
+                                                        ))}
                                                     </div>
                                                 </div>
                                             ))
@@ -328,8 +409,7 @@ function App() {
             )}
 
             <footer className="footer">
-                <p>Built with shadcn/ui patterns 💜</p>
-                {DEMO_MODE && <span className="demo-badge">Demo Mode</span>}
+                <p>Connected to shadcn/ui 💜</p>
             </footer>
         </div>
     );

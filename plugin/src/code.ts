@@ -1,15 +1,99 @@
-// Main Plugin Code - Edgy Flow Analyzer
+// Main Plugin Code - Edgy Flow Analyzer with Design System Integration
 
 import { ScreenData, NodeData, ConnectionData, AnalysisResult, PluginMessage } from './types';
 
 // Show the UI
 figma.showUI(__html__, {
     width: 420,
-    height: 650,
+    height: 700,
     themeColors: true
 });
 
 let lastAnalysisResult: AnalysisResult | null = null;
+
+// Component key mapping - these can be updated with actual library component keys
+// To find a component key: select the component in Figma and run figma.currentPage.selection[0].key in console
+interface ComponentMapping {
+    name: string;
+    key: string;
+    aliases: string[];
+}
+
+// Placeholder component mappings - users can update these with their library component keys
+const componentMappings: ComponentMapping[] = [
+    { name: 'Alert', key: '', aliases: ['alert', 'error', 'warning', 'notification'] },
+    { name: 'AlertDialog', key: '', aliases: ['alert-dialog', 'confirm', 'dialog', 'modal'] },
+    { name: 'Toast', key: '', aliases: ['toast', 'snackbar', 'notification'] },
+    { name: 'Skeleton', key: '', aliases: ['skeleton', 'loader', 'loading', 'placeholder'] },
+    { name: 'Button', key: '', aliases: ['button', 'btn', 'cta'] },
+    { name: 'Card', key: '', aliases: ['card', 'container', 'box'] },
+    { name: 'Input', key: '', aliases: ['input', 'text-field', 'form-field'] },
+    { name: 'Progress', key: '', aliases: ['progress', 'loading-bar', 'spinner'] },
+    { name: 'Badge', key: '', aliases: ['badge', 'tag', 'label', 'status'] },
+];
+
+// Find component mapping by suggested name
+function findComponentMapping(suggestedName: string): ComponentMapping | null {
+    const normalized = suggestedName.toLowerCase();
+    return componentMappings.find(c =>
+        c.name.toLowerCase() === normalized ||
+        c.aliases.some(a => normalized.includes(a))
+    ) || null;
+}
+
+// Check if we have a valid key for a component
+function hasLibraryKey(componentName: string): boolean {
+    const mapping = findComponentMapping(componentName);
+    return mapping !== null && mapping.key !== '';
+}
+
+// Get library info for UI
+function getLibraryStatus(): { available: number; total: number; components: string[] } {
+    const withKeys = componentMappings.filter(c => c.key !== '');
+    return {
+        available: withKeys.length,
+        total: componentMappings.length,
+        components: withKeys.map(c => c.name)
+    };
+}
+
+// Insert component from library by key
+async function insertLibraryComponent(
+    componentKey: string,
+    targetScreenId: string,
+    offsetIndex: number = 0
+): Promise<boolean> {
+    if (!componentKey) {
+        figma.notify('⚠️ Component key not configured', { error: true });
+        return false;
+    }
+
+    try {
+        const targetFrame = figma.getNodeById(targetScreenId);
+        if (!targetFrame || targetFrame.type !== 'FRAME') {
+            figma.notify('⚠️ Target screen not found', { error: true });
+            return false;
+        }
+
+        const component = await figma.importComponentByKeyAsync(componentKey);
+        const instance = component.createInstance();
+
+        // Position to the right of the target frame
+        instance.x = targetFrame.x + targetFrame.width + 40 + (offsetIndex * 20);
+        instance.y = targetFrame.y + 100 + (offsetIndex * 80);
+
+        figma.currentPage.appendChild(instance);
+        figma.currentPage.selection = [instance];
+        figma.viewport.scrollAndZoomIntoView([instance]);
+
+        figma.notify(`✅ Inserted ${component.name}`, { timeout: 2000 });
+        return true;
+    } catch (error) {
+        console.error('Failed to insert component:', error);
+        figma.notify('⚠️ Could not insert component', { error: true });
+        return false;
+    }
+}
 
 // Extract node data recursively
 function extractNodeData(node: SceneNode): NodeData {
@@ -175,7 +259,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
                 return;
             }
 
-            // Send screen data to UI for GitHub upload
+            // Send screen data to UI for analysis
             figma.ui.postMessage({
                 type: 'screens-exported',
                 payload: { screens, timestamp: new Date().toISOString() }
@@ -186,7 +270,49 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         case 'analysis-complete': {
             const result = msg.payload as { result: AnalysisResult };
             lastAnalysisResult = result.result;
+
+            // Enrich results with library component matches
+            const enrichedScreens = result.result.screens.map(screen => ({
+                ...screen,
+                issues: screen.issues.map(issue => {
+                    const matches = issue.suggestedComponents.map(comp => {
+                        const mapping = findComponentMapping(comp);
+                        return mapping && mapping.key
+                            ? { name: comp, libraryKey: mapping.key, libraryName: mapping.name }
+                            : { name: comp };
+                    });
+                    return { ...issue, libraryMatches: matches };
+                })
+            }));
+
+            figma.ui.postMessage({
+                type: 'results-enriched',
+                payload: { screens: enrichedScreens }
+            });
+
             figma.notify(`✅ Analysis complete: ${result.result.totalIssues} issues found`, { timeout: 3000 });
+            break;
+        }
+
+        case 'insert-component': {
+            const { componentKey, screenId, index } = msg.payload as {
+                componentKey: string;
+                screenId: string;
+                index: number;
+            };
+            await insertLibraryComponent(componentKey, screenId, index);
+            break;
+        }
+
+        case 'find-component': {
+            const { componentName } = msg.payload as { componentName: string };
+            const mapping = findComponentMapping(componentName);
+            figma.ui.postMessage({
+                type: 'component-found',
+                payload: mapping && mapping.key
+                    ? { found: true, name: mapping.name, key: mapping.key }
+                    : { found: false, name: componentName }
+            });
             break;
         }
 
@@ -212,9 +338,20 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         }
 
         case 'generate-report': {
-            // Generate comprehensive report frame
-            // (Implementation similar to annotation cards but comprehensive)
             figma.notify('📋 Report generation coming soon!', { timeout: 2000 });
+            break;
+        }
+
+        case 'load-library': {
+            const status = getLibraryStatus();
+            figma.ui.postMessage({
+                type: 'library-loaded',
+                payload: {
+                    componentCount: status.available,
+                    totalCount: status.total,
+                    components: status.components
+                }
+            });
             break;
         }
     }
@@ -223,5 +360,16 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 // Listen for selection changes
 figma.on('selectionchange', sendSelectionUpdate);
 
-// Send initial selection state
+// Initialize
 sendSelectionUpdate();
+
+// Send library status on load
+const libStatus = getLibraryStatus();
+figma.ui.postMessage({
+    type: 'library-loaded',
+    payload: {
+        componentCount: libStatus.available,
+        totalCount: libStatus.total,
+        components: libStatus.components
+    }
+});

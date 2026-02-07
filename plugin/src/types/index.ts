@@ -65,7 +65,10 @@ export interface AnalysisResult {
 }
 
 export interface PluginMessage {
-    type: 'analyze' | 'generate-report' | 'insert-placeholders' | 'selection-changed' | 'analysis-complete' | 'error' | 'config-update';
+    type: 'analyze' | 'generate-report' | 'insert-placeholders' | 'selection-changed' |
+    'analysis-complete' | 'error' | 'config-update' | 'insert-component' |
+    'find-component' | 'load-library' | 'screens-exported' | 'library-loaded' |
+    'library-error' | 'results-enriched' | 'component-found';
     payload?: unknown;
 }
 
