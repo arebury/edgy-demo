@@ -10,15 +10,75 @@ let enrichedScreensCache: any[] = [];
 const SHADCN_BASE = 'https://www.figma.com/design/lmUgIGwdG2ZaVfvZzFuU2H/-shadcn-ui---Design-System--Community-?node-id=';
 
 const componentLibrary = [
-    { name: 'Alert', nodeId: '4-6598', icon: '⚠️', aliases: ['alert', 'error', 'warning'] },
-    { name: 'Button', nodeId: '13-1070', icon: '🔘', aliases: ['button', 'btn', 'cta'] },
-    { name: 'Input', nodeId: '13-1256', icon: '📝', aliases: ['input', 'text-field', 'form'] },
-    { name: 'Dialog', nodeId: '13-1026', icon: '📋', aliases: ['dialog', 'modal', 'popup'] },
-    { name: 'Progress', nodeId: '13-1306', icon: '⏳', aliases: ['progress', 'loading'] },
-    { name: 'Skeleton', nodeId: '13-1070', icon: '🦴', aliases: ['skeleton', 'loader'] },
-    { name: 'Toast', nodeId: '4-6598', icon: '🍞', aliases: ['toast', 'snackbar'] },
-    { name: 'Card', nodeId: '13-1026', icon: '📦', aliases: ['card', 'container'] },
+    { name: 'Alert', nodeId: '4-6598', icon: '⚠️', aliases: ['alert', 'error', 'warning'], searchTerms: ['alert', 'Alert'] },
+    { name: 'Button', nodeId: '13-1070', icon: '🔘', aliases: ['button', 'btn', 'cta'], searchTerms: ['button', 'Button'] },
+    { name: 'Input', nodeId: '13-1256', icon: '📝', aliases: ['input', 'text-field', 'form'], searchTerms: ['input', 'Input'] },
+    { name: 'Dialog', nodeId: '13-1026', icon: '📋', aliases: ['dialog', 'modal', 'popup'], searchTerms: ['dialog', 'Dialog', 'alert dialog'] },
+    { name: 'Progress', nodeId: '13-1306', icon: '⏳', aliases: ['progress', 'loading'], searchTerms: ['progress', 'Progress'] },
+    { name: 'Skeleton', nodeId: '13-1070', icon: '🦴', aliases: ['skeleton', 'loader'], searchTerms: ['skeleton', 'Skeleton'] },
+    { name: 'Toast', nodeId: '4-6598', icon: '🍞', aliases: ['toast', 'snackbar'], searchTerms: ['toast', 'Toast'] },
+    { name: 'Card', nodeId: '13-1026', icon: '📦', aliases: ['card', 'container'], searchTerms: ['card', 'Card'] },
 ];
+
+// ==================== AUTO-INSERT FROM TEAM LIBRARY ====================
+
+async function findAndInsertComponent(searchName: string): Promise<InstanceNode | null> {
+    try {
+        // Search for components in enabled Team Libraries
+        const results = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+        console.log('Available libraries:', results);
+
+        // Try searching with the component API
+        const components = await figma.teamLibrary.getComponentsAsync({
+            query: searchName
+        });
+
+        console.log(`Found ${components.length} components for "${searchName}"`);
+
+        if (components.length === 0) {
+            figma.notify(`⚠️ No component found for "${searchName}"`, { error: true });
+            return null;
+        }
+
+        // Get the first matching component
+        const compMeta = components[0];
+        console.log('Using component:', compMeta.name, compMeta.key);
+
+        // Import the component
+        const component = await figma.importComponentByKeyAsync(compMeta.key);
+
+        // Create an instance
+        const instance = component.createInstance();
+
+        return instance;
+    } catch (err: any) {
+        console.error('Auto-insert error:', err);
+        figma.notify(`❌ Auto-insert failed: ${err.message || err}`, { error: true });
+        return null;
+    }
+}
+
+async function insertComponentsIntoReport(container: FrameNode, componentNames: string[]): Promise<void> {
+    let yOffset = container.height + 20;
+
+    for (const name of componentNames) {
+        try {
+            figma.notify(`⏳ Inserting ${name}...`, { timeout: 1000 });
+            const instance = await findAndInsertComponent(name);
+
+            if (instance) {
+                // Position the instance below the report
+                instance.x = container.x;
+                instance.y = container.y + yOffset;
+                yOffset += instance.height + 20;
+
+                figma.notify(`✅ ${name} inserted!`, { timeout: 1500 });
+            }
+        } catch (err) {
+            console.error(`Failed to insert ${name}:`, err);
+        }
+    }
+}
 
 function findComponentInfo(name: string) {
     const n = name.toLowerCase();
@@ -439,7 +499,24 @@ figma.ui.onmessage = async (msg: any) => {
             try {
                 const report = await createBeautifulReport();
                 if (report) {
-                    figma.notify('✅ Report created!', { timeout: 2000 });
+                    figma.notify('✅ Report created! Now inserting components...', { timeout: 2000 });
+
+                    // Collect unique components to insert
+                    const uniqueComps = new Set<string>();
+                    for (const screen of enrichedScreensCache) {
+                        for (const issue of screen.issues) {
+                            for (const comp of issue.suggestedComponents) {
+                                const info = findComponentInfo(comp);
+                                if (info) uniqueComps.add(info.name);
+                            }
+                        }
+                    }
+
+                    // Insert components below the report
+                    if (uniqueComps.size > 0) {
+                        await insertComponentsIntoReport(report, Array.from(uniqueComps));
+                        figma.notify(`✅ Done! Report + ${uniqueComps.size} components inserted`, { timeout: 3000 });
+                    }
                 }
             } catch (err: any) {
                 console.error('Report error:', err);
