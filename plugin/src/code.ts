@@ -1,4 +1,4 @@
-// Main Plugin Code - Edgy Flow Analyzer with Design System Integration
+// Main Plugin Code - Edgy Flow Analyzer with Design System Links
 
 import { ScreenData, NodeData, ConnectionData, AnalysisResult, PluginMessage } from './types';
 
@@ -11,88 +11,53 @@ figma.showUI(__html__, {
 
 let lastAnalysisResult: AnalysisResult | null = null;
 
-// Component key mapping - these can be updated with actual library component keys
-// To find a component key: select the component in Figma and run figma.currentPage.selection[0].key in console
-interface ComponentMapping {
+// shadcn Figma file base URL
+const SHADCN_FILE_BASE = 'https://www.figma.com/design/lmUgIGwdG2ZaVfvZzFuU2H/-shadcn-ui---Design-System--Community-?node-id=';
+
+// Component to shadcn Figma node mapping
+interface ComponentLink {
     name: string;
-    key: string;
+    nodeId: string;
     aliases: string[];
 }
 
-// Placeholder component mappings - users can update these with their library component keys
-const componentMappings: ComponentMapping[] = [
-    { name: 'Alert', key: '', aliases: ['alert', 'error', 'warning', 'notification'] },
-    { name: 'AlertDialog', key: '', aliases: ['alert-dialog', 'confirm', 'dialog', 'modal'] },
-    { name: 'Toast', key: '', aliases: ['toast', 'snackbar', 'notification'] },
-    { name: 'Skeleton', key: '', aliases: ['skeleton', 'loader', 'loading', 'placeholder'] },
-    { name: 'Button', key: '', aliases: ['button', 'btn', 'cta'] },
-    { name: 'Card', key: '', aliases: ['card', 'container', 'box'] },
-    { name: 'Input', key: '', aliases: ['input', 'text-field', 'form-field'] },
-    { name: 'Progress', key: '', aliases: ['progress', 'loading-bar', 'spinner'] },
-    { name: 'Badge', key: '', aliases: ['badge', 'tag', 'label', 'status'] },
+const componentLinks: ComponentLink[] = [
+    { name: 'Alert', nodeId: '4-6598', aliases: ['alert', 'error-message', 'warning', 'notification'] },
+    { name: 'AlertDialog', nodeId: '4-6598', aliases: ['alert-dialog', 'confirm', 'confirmation'] },
+    { name: 'Button', nodeId: '13-1070', aliases: ['button', 'btn', 'cta', 'submit'] },
+    { name: 'Input', nodeId: '13-1256', aliases: ['input', 'text-field', 'form-field', 'textfield'] },
+    { name: 'Dialog', nodeId: '13-1026', aliases: ['dialog', 'modal', 'popup', 'overlay'] },
+    { name: 'Progress', nodeId: '13-1306', aliases: ['progress', 'loading-bar', 'progress-bar'] },
+    { name: 'Tabs', nodeId: '13-1356', aliases: ['tabs', 'tab-bar', 'navigation'] },
+    { name: 'Skeleton', nodeId: '13-1070', aliases: ['skeleton', 'loader', 'loading', 'placeholder'] }, // Using Button as fallback
+    { name: 'Toast', nodeId: '4-6598', aliases: ['toast', 'snackbar', 'message'] }, // Using Alert section
+    { name: 'Card', nodeId: '13-1026', aliases: ['card', 'container', 'box'] }, // Using Dialog section
+    { name: 'Badge', nodeId: '13-1070', aliases: ['badge', 'tag', 'label', 'status'] }, // Using Button section
 ];
 
-// Find component mapping by suggested name
-function findComponentMapping(suggestedName: string): ComponentMapping | null {
+// Find component link by name
+function findComponentLink(suggestedName: string): { name: string; url: string } | null {
     const normalized = suggestedName.toLowerCase();
-    return componentMappings.find(c =>
+    const link = componentLinks.find(c =>
         c.name.toLowerCase() === normalized ||
         c.aliases.some(a => normalized.includes(a))
-    ) || null;
+    );
+
+    if (link) {
+        return {
+            name: link.name,
+            url: SHADCN_FILE_BASE + link.nodeId
+        };
+    }
+    return null;
 }
 
-// Check if we have a valid key for a component
-function hasLibraryKey(componentName: string): boolean {
-    const mapping = findComponentMapping(componentName);
-    return mapping !== null && mapping.key !== '';
-}
-
-// Get library info for UI
-function getLibraryStatus(): { available: number; total: number; components: string[] } {
-    const withKeys = componentMappings.filter(c => c.key !== '');
+// Get library status for UI
+function getLibraryStatus(): { available: number; components: string[] } {
     return {
-        available: withKeys.length,
-        total: componentMappings.length,
-        components: withKeys.map(c => c.name)
+        available: componentLinks.length,
+        components: componentLinks.map(c => c.name)
     };
-}
-
-// Insert component from library by key
-async function insertLibraryComponent(
-    componentKey: string,
-    targetScreenId: string,
-    offsetIndex: number = 0
-): Promise<boolean> {
-    if (!componentKey) {
-        figma.notify('⚠️ Component key not configured', { error: true });
-        return false;
-    }
-
-    try {
-        const targetFrame = figma.getNodeById(targetScreenId);
-        if (!targetFrame || targetFrame.type !== 'FRAME') {
-            figma.notify('⚠️ Target screen not found', { error: true });
-            return false;
-        }
-
-        const component = await figma.importComponentByKeyAsync(componentKey);
-        const instance = component.createInstance();
-
-        // Position to the right of the target frame
-        instance.x = targetFrame.x + targetFrame.width + 40 + (offsetIndex * 20);
-        instance.y = targetFrame.y + 100 + (offsetIndex * 80);
-
-        figma.currentPage.appendChild(instance);
-        figma.currentPage.selection = [instance];
-        figma.viewport.scrollAndZoomIntoView([instance]);
-
-        figma.notify(`✅ Inserted ${component.name}`, { timeout: 2000 });
-        return true;
-    } catch (error) {
-        console.error('Failed to insert component:', error);
-        figma.notify('⚠️ Could not insert component', { error: true });
-        return false;
-    }
 }
 
 // Extract node data recursively
@@ -271,14 +236,14 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
             const result = msg.payload as { result: AnalysisResult };
             lastAnalysisResult = result.result;
 
-            // Enrich results with library component matches
+            // Enrich results with library component links
             const enrichedScreens = result.result.screens.map(screen => ({
                 ...screen,
                 issues: screen.issues.map(issue => {
                     const matches = issue.suggestedComponents.map(comp => {
-                        const mapping = findComponentMapping(comp);
-                        return mapping && mapping.key
-                            ? { name: comp, libraryKey: mapping.key, libraryName: mapping.name }
+                        const link = findComponentLink(comp);
+                        return link
+                            ? { name: comp, libraryUrl: link.url, libraryName: link.name }
                             : { name: comp };
                     });
                     return { ...issue, libraryMatches: matches };
@@ -294,23 +259,13 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
             break;
         }
 
-        case 'insert-component': {
-            const { componentKey, screenId, index } = msg.payload as {
-                componentKey: string;
-                screenId: string;
-                index: number;
-            };
-            await insertLibraryComponent(componentKey, screenId, index);
-            break;
-        }
-
         case 'find-component': {
             const { componentName } = msg.payload as { componentName: string };
-            const mapping = findComponentMapping(componentName);
+            const link = findComponentLink(componentName);
             figma.ui.postMessage({
                 type: 'component-found',
-                payload: mapping && mapping.key
-                    ? { found: true, name: mapping.name, key: mapping.key }
+                payload: link
+                    ? { found: true, name: link.name, url: link.url }
                     : { found: false, name: componentName }
             });
             break;
@@ -348,7 +303,6 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
                 type: 'library-loaded',
                 payload: {
                     componentCount: status.available,
-                    totalCount: status.total,
                     components: status.components
                 }
             });
@@ -369,7 +323,6 @@ figma.ui.postMessage({
     type: 'library-loaded',
     payload: {
         componentCount: libStatus.available,
-        totalCount: libStatus.total,
         components: libStatus.components
     }
 });

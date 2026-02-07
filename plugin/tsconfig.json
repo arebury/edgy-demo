@@ -2,7 +2,7 @@
     "compilerOptions": {
         "target": "ES2017",
         "lib": [
-            "ES2017",
+            "ES2019",
             "DOM"
         ],
         "strict": true,

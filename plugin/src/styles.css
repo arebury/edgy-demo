@@ -120,6 +120,45 @@ body {
     color: var(--primary);
 }
 
+/* Library Link Buttons */
+.btn-view-library {
+    padding: 4px 10px;
+    font-size: 10px;
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-view-library:hover {
+    background: linear-gradient(135deg, #6d28d9, #9333ea);
+    transform: scale(1.05);
+}
+
+.library-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.btn-view-library-small {
+    padding: 3px 8px;
+    font-size: 10px;
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-view-library-small:hover {
+    background: linear-gradient(135deg, #6d28d9, #9333ea);
+}
+
 /* Errors */
 .error-message {
     background: var(--critical-bg);
