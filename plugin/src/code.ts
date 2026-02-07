@@ -157,8 +157,8 @@ async function createFullReport(): Promise<FrameNode | null> {
     try {
         // Load fonts
         await figma.loadFontAsync({ family: 'Roboto', style: 'Bold' });
-        await figma.loadFontAsync({ family: 'Roboto', style: 'SemiBold' });
-        await figma.loadFontAsync({ family: 'Roboto', style: 'Medium' });
+        await figma.loadFontAsync({ family: 'Roboto', style: 'Bold' });
+        await figma.loadFontAsync({ family: 'Roboto', style: 'Regular' });
         await figma.loadFontAsync({ family: 'Roboto', style: 'Regular' });
     } catch (e) {
         figma.notify('⚠️ Could not load fonts', { error: true });
@@ -256,7 +256,7 @@ async function createFullReport(): Promise<FrameNode | null> {
         const lbl = figma.createText();
         lbl.characters = label;
         lbl.fontSize = 11;
-        lbl.fontName = { family: 'Roboto', style: 'Medium' };
+        lbl.fontName = { family: 'Roboto', style: 'Regular' };
         lbl.fills = [{ type: 'SOLID', color: COLORS.gray }];
         stat.appendChild(lbl);
 
@@ -291,7 +291,7 @@ async function createFullReport(): Promise<FrameNode | null> {
         const screenTitle = figma.createText();
         screenTitle.characters = `📱 ${screen.screenName}`;
         screenTitle.fontSize = 16;
-        screenTitle.fontName = { family: 'Roboto', style: 'SemiBold' };
+        screenTitle.fontName = { family: 'Roboto', style: 'Bold' };
         screenTitle.fills = [{ type: 'SOLID', color: COLORS.white }];
         section.appendChild(screenTitle);
 
@@ -322,7 +322,7 @@ async function createFullReport(): Promise<FrameNode | null> {
             const issueName = figma.createText();
             issueName.characters = issue.name;
             issueName.fontSize = 14;
-            issueName.fontName = { family: 'Roboto', style: 'Medium' };
+            issueName.fontName = { family: 'Roboto', style: 'Regular' };
             issueName.fills = [{ type: 'SOLID', color: COLORS.lightGray }];
             issueHeader.appendChild(issueName);
 
@@ -358,7 +358,7 @@ async function createFullReport(): Promise<FrameNode | null> {
                 const tagText = figma.createText();
                 tagText.characters = `🔗 ${info.name}`;
                 tagText.fontSize = 10;
-                tagText.fontName = { family: 'Roboto', style: 'SemiBold' };
+                tagText.fontName = { family: 'Roboto', style: 'Bold' };
                 tagText.fills = [{ type: 'SOLID', color: COLORS.white }];
                 tagText.hyperlink = { type: 'URL', value: SHADCN_FILE_BASE + info.nodeId };
                 tag.appendChild(tagText);
@@ -453,7 +453,7 @@ async function createFullReport(): Promise<FrameNode | null> {
         const cardName = figma.createText();
         cardName.characters = info.name;
         cardName.fontSize = 14;
-        cardName.fontName = { family: 'Roboto', style: 'SemiBold' };
+        cardName.fontName = { family: 'Roboto', style: 'Bold' };
         cardName.fills = [{ type: 'SOLID', color: COLORS.white }];
         nameCol.appendChild(cardName);
 
@@ -483,7 +483,7 @@ async function createFullReport(): Promise<FrameNode | null> {
         const linkText = figma.createText();
         linkText.characters = '🔗 View';
         linkText.fontSize = 11;
-        linkText.fontName = { family: 'Roboto', style: 'SemiBold' };
+        linkText.fontName = { family: 'Roboto', style: 'Bold' };
         linkText.fills = [{ type: 'SOLID', color: COLORS.white }];
         linkText.hyperlink = { type: 'URL', value: SHADCN_FILE_BASE + info.nodeId };
         linkBtn.appendChild(linkText);
@@ -513,7 +513,7 @@ async function createFullReport(): Promise<FrameNode | null> {
     const footerLink = figma.createText();
     footerLink.characters = 'shadcn/ui 💜';
     footerLink.fontSize = 12;
-    footerLink.fontName = { family: 'Roboto', style: 'SemiBold' };
+    footerLink.fontName = { family: 'Roboto', style: 'Bold' };
     footerLink.fills = [{ type: 'SOLID', color: COLORS.accentLight }];
     footerLink.hyperlink = { type: 'URL', value: 'https://www.figma.com/design/lmUgIGwdG2ZaVfvZzFuU2H/-shadcn-ui---Design-System--Community-' };
     footer.appendChild(footerLink);
