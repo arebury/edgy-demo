@@ -1,0 +1,10 @@
+{
+    "name": "edgy-backend",
+    "version": "1.0.0",
+    "description": "Edgy analysis backend",
+    "main": "analyzer/analyze.js",
+    "scripts": {
+        "analyze": "node analyzer/analyze.js"
+    },
+    "dependencies": {}
+}

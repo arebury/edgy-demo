@@ -1,0 +1,25 @@
+{
+    "name": "edgy-plugin",
+    "version": "1.0.0",
+    "description": "Figma plugin to analyze flows and identify missing edge cases",
+    "scripts": {
+        "build": "npm run build:code && npm run build:ui",
+        "build:code": "esbuild src/code.ts --bundle --outfile=dist/code.js --target=es2017",
+        "build:ui": "esbuild src/ui.tsx --bundle --outfile=dist/ui.js --target=es2017 --loader:.tsx=tsx && node scripts/build-html.js",
+        "watch": "concurrently \"npm run watch:code\" \"npm run watch:ui\"",
+        "watch:code": "esbuild src/code.ts --bundle --outfile=dist/code.js --target=es2017 --watch",
+        "watch:ui": "esbuild src/ui.tsx --bundle --outfile=dist/ui.js --target=es2017 --loader:.tsx=tsx --watch"
+    },
+    "devDependencies": {
+        "@figma/plugin-typings": "^1.98.0",
+        "@types/react": "^18.2.0",
+        "@types/react-dom": "^18.2.0",
+        "concurrently": "^8.2.0",
+        "esbuild": "^0.20.0",
+        "typescript": "^5.3.0"
+    },
+    "dependencies": {
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0"
+    }
+}

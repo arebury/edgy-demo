@@ -1,0 +1,43 @@
+name: Analyze Figma Screens
+
+on:
+  push:
+    paths:
+      - 'screens/*.json'
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: 'Project name for the analysis'
+        required: false
+        default: 'Untitled'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          npm install
+
+      - name: Run analysis
+        run: |
+          cd backend
+          node analyzer/analyze.js
+
+      - name: Commit results
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add results/
+          git diff --staged --quiet || git commit -m "🔍 Analysis results updated"
+          git push

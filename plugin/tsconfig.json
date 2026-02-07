@@ -1,0 +1,24 @@
+{
+    "compilerOptions": {
+        "target": "ES2017",
+        "lib": [
+            "ES2017",
+            "DOM"
+        ],
+        "strict": true,
+        "moduleResolution": "node",
+        "module": "ESNext",
+        "jsx": "react",
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "outDir": "./dist",
+        "typeRoots": [
+            "./node_modules/@types",
+            "./node_modules/@figma"
+        ]
+    },
+    "include": [
+        "src/**/*"
+    ]
+}

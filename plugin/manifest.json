@@ -1,0 +1,21 @@
+{
+    "name": "Edgy",
+    "id": "edgy-flow-analyzer",
+    "api": "1.0.0",
+    "main": "dist/code.js",
+    "ui": "dist/ui.html",
+    "capabilities": [],
+    "enableProposedApi": false,
+    "editorType": [
+        "figma"
+    ],
+    "networkAccess": {
+        "allowedDomains": [
+            "api.github.com",
+            "raw.githubusercontent.com"
+        ]
+    },
+    "permissions": [
+        "currentuser"
+    ]
+}
