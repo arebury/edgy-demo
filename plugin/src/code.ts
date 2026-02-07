@@ -156,10 +156,10 @@ async function createFullReport(): Promise<FrameNode | null> {
 
     try {
         // Load fonts
-        await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
-        await figma.loadFontAsync({ family: 'Inter', style: 'SemiBold' });
-        await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
-        await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+        await figma.loadFontAsync({ family: 'Roboto', style: 'Bold' });
+        await figma.loadFontAsync({ family: 'Roboto', style: 'SemiBold' });
+        await figma.loadFontAsync({ family: 'Roboto', style: 'Medium' });
+        await figma.loadFontAsync({ family: 'Roboto', style: 'Regular' });
     } catch (e) {
         figma.notify('⚠️ Could not load fonts', { error: true });
         return null;
@@ -208,14 +208,14 @@ async function createFullReport(): Promise<FrameNode | null> {
     const title = figma.createText();
     title.characters = '⚡ Edge Case Report';
     title.fontSize = 28;
-    title.fontName = { family: 'Inter', style: 'Bold' };
+    title.fontName = { family: 'Roboto', style: 'Bold' };
     title.fills = [{ type: 'SOLID', color: COLORS.white }];
     header.appendChild(title);
 
     const subtitle = figma.createText();
     subtitle.characters = `${new Date().toLocaleDateString()} • ${result.totalScreens} screens • ${result.totalIssues} issues`;
     subtitle.fontSize = 14;
-    subtitle.fontName = { family: 'Inter', style: 'Regular' };
+    subtitle.fontName = { family: 'Roboto', style: 'Regular' };
     subtitle.fills = [{ type: 'SOLID', color: COLORS.gray }];
     header.appendChild(subtitle);
 
@@ -249,14 +249,14 @@ async function createFullReport(): Promise<FrameNode | null> {
         const val = figma.createText();
         val.characters = value.toString();
         val.fontSize = 28;
-        val.fontName = { family: 'Inter', style: 'Bold' };
+        val.fontName = { family: 'Roboto', style: 'Bold' };
         val.fills = [{ type: 'SOLID', color }];
         stat.appendChild(val);
 
         const lbl = figma.createText();
         lbl.characters = label;
         lbl.fontSize = 11;
-        lbl.fontName = { family: 'Inter', style: 'Medium' };
+        lbl.fontName = { family: 'Roboto', style: 'Medium' };
         lbl.fills = [{ type: 'SOLID', color: COLORS.gray }];
         stat.appendChild(lbl);
 
@@ -291,7 +291,7 @@ async function createFullReport(): Promise<FrameNode | null> {
         const screenTitle = figma.createText();
         screenTitle.characters = `📱 ${screen.screenName}`;
         screenTitle.fontSize = 16;
-        screenTitle.fontName = { family: 'Inter', style: 'SemiBold' };
+        screenTitle.fontName = { family: 'Roboto', style: 'SemiBold' };
         screenTitle.fills = [{ type: 'SOLID', color: COLORS.white }];
         section.appendChild(screenTitle);
 
@@ -322,7 +322,7 @@ async function createFullReport(): Promise<FrameNode | null> {
             const issueName = figma.createText();
             issueName.characters = issue.name;
             issueName.fontSize = 14;
-            issueName.fontName = { family: 'Inter', style: 'Medium' };
+            issueName.fontName = { family: 'Roboto', style: 'Medium' };
             issueName.fills = [{ type: 'SOLID', color: COLORS.lightGray }];
             issueHeader.appendChild(issueName);
 
@@ -358,7 +358,7 @@ async function createFullReport(): Promise<FrameNode | null> {
                 const tagText = figma.createText();
                 tagText.characters = `🔗 ${info.name}`;
                 tagText.fontSize = 10;
-                tagText.fontName = { family: 'Inter', style: 'SemiBold' };
+                tagText.fontName = { family: 'Roboto', style: 'SemiBold' };
                 tagText.fills = [{ type: 'SOLID', color: COLORS.white }];
                 tagText.hyperlink = { type: 'URL', value: SHADCN_FILE_BASE + info.nodeId };
                 tag.appendChild(tagText);
@@ -391,7 +391,7 @@ async function createFullReport(): Promise<FrameNode | null> {
     const compTitle = figma.createText();
     compTitle.characters = '📦 Suggested Components';
     compTitle.fontSize = 18;
-    compTitle.fontName = { family: 'Inter', style: 'Bold' };
+    compTitle.fontName = { family: 'Roboto', style: 'Bold' };
     compTitle.fills = [{ type: 'SOLID', color: COLORS.white }];
     compSection.appendChild(compTitle);
 
@@ -453,14 +453,14 @@ async function createFullReport(): Promise<FrameNode | null> {
         const cardName = figma.createText();
         cardName.characters = info.name;
         cardName.fontSize = 14;
-        cardName.fontName = { family: 'Inter', style: 'SemiBold' };
+        cardName.fontName = { family: 'Roboto', style: 'SemiBold' };
         cardName.fills = [{ type: 'SOLID', color: COLORS.white }];
         nameCol.appendChild(cardName);
 
         const cardDesc = figma.createText();
         cardDesc.characters = info.description;
         cardDesc.fontSize = 11;
-        cardDesc.fontName = { family: 'Inter', style: 'Regular' };
+        cardDesc.fontName = { family: 'Roboto', style: 'Regular' };
         cardDesc.fills = [{ type: 'SOLID', color: COLORS.gray }];
         nameCol.appendChild(cardDesc);
 
@@ -483,7 +483,7 @@ async function createFullReport(): Promise<FrameNode | null> {
         const linkText = figma.createText();
         linkText.characters = '🔗 View';
         linkText.fontSize = 11;
-        linkText.fontName = { family: 'Inter', style: 'SemiBold' };
+        linkText.fontName = { family: 'Roboto', style: 'SemiBold' };
         linkText.fills = [{ type: 'SOLID', color: COLORS.white }];
         linkText.hyperlink = { type: 'URL', value: SHADCN_FILE_BASE + info.nodeId };
         linkBtn.appendChild(linkText);
@@ -506,14 +506,14 @@ async function createFullReport(): Promise<FrameNode | null> {
     const footerText = figma.createText();
     footerText.characters = 'Linked to';
     footerText.fontSize = 12;
-    footerText.fontName = { family: 'Inter', style: 'Regular' };
+    footerText.fontName = { family: 'Roboto', style: 'Regular' };
     footerText.fills = [{ type: 'SOLID', color: COLORS.gray }];
     footer.appendChild(footerText);
 
     const footerLink = figma.createText();
     footerLink.characters = 'shadcn/ui 💜';
     footerLink.fontSize = 12;
-    footerLink.fontName = { family: 'Inter', style: 'SemiBold' };
+    footerLink.fontName = { family: 'Roboto', style: 'SemiBold' };
     footerLink.fills = [{ type: 'SOLID', color: COLORS.accentLight }];
     footerLink.hyperlink = { type: 'URL', value: 'https://www.figma.com/design/lmUgIGwdG2ZaVfvZzFuU2H/-shadcn-ui---Design-System--Community-' };
     footer.appendChild(footerLink);
