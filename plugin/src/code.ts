@@ -1,6 +1,6 @@
 // Main Plugin Code - Edgy Flow Analyzer with Design System Links
 
-import { ScreenData, NodeData, ConnectionData, AnalysisResult, PluginMessage } from './types';
+import { ScreenData, NodeData, ConnectionData, AnalysisResult, PluginMessage, EdgeCaseIssue } from './types';
 
 // Show the UI
 figma.showUI(__html__, {
@@ -10,9 +10,29 @@ figma.showUI(__html__, {
 });
 
 let lastAnalysisResult: AnalysisResult | null = null;
+let enrichedScreensCache: EnrichedScreen[] = [];
 
 // shadcn Figma file base URL
 const SHADCN_FILE_BASE = 'https://www.figma.com/design/lmUgIGwdG2ZaVfvZzFuU2H/-shadcn-ui---Design-System--Community-?node-id=';
+
+// Types for enriched data
+interface LibraryMatch {
+    name: string;
+    libraryUrl?: string;
+    libraryName?: string;
+}
+
+interface EnrichedIssue extends EdgeCaseIssue {
+    libraryMatches?: LibraryMatch[];
+}
+
+interface EnrichedScreen {
+    screenId: string;
+    screenName: string;
+    detectedPatterns: string[];
+    issues: EnrichedIssue[];
+    missingStates: string[];
+}
 
 // Component to shadcn Figma node mapping
 interface ComponentLink {
@@ -29,10 +49,10 @@ const componentLinks: ComponentLink[] = [
     { name: 'Dialog', nodeId: '13-1026', aliases: ['dialog', 'modal', 'popup', 'overlay'] },
     { name: 'Progress', nodeId: '13-1306', aliases: ['progress', 'loading-bar', 'progress-bar'] },
     { name: 'Tabs', nodeId: '13-1356', aliases: ['tabs', 'tab-bar', 'navigation'] },
-    { name: 'Skeleton', nodeId: '13-1070', aliases: ['skeleton', 'loader', 'loading', 'placeholder'] }, // Using Button as fallback
-    { name: 'Toast', nodeId: '4-6598', aliases: ['toast', 'snackbar', 'message'] }, // Using Alert section
-    { name: 'Card', nodeId: '13-1026', aliases: ['card', 'container', 'box'] }, // Using Dialog section
-    { name: 'Badge', nodeId: '13-1070', aliases: ['badge', 'tag', 'label', 'status'] }, // Using Button section
+    { name: 'Skeleton', nodeId: '13-1070', aliases: ['skeleton', 'loader', 'loading', 'placeholder'] },
+    { name: 'Toast', nodeId: '4-6598', aliases: ['toast', 'snackbar', 'message'] },
+    { name: 'Card', nodeId: '13-1026', aliases: ['card', 'container', 'box'] },
+    { name: 'Badge', nodeId: '13-1070', aliases: ['badge', 'tag', 'label', 'status'] },
 ];
 
 // Find component link by name
@@ -140,74 +160,330 @@ function sendSelectionUpdate(): void {
     } as PluginMessage);
 }
 
-// Generate annotation card for a screen
-async function createAnnotationCard(
-    screenId: string,
-    issues: Array<{ name: string; severity: string; suggestedComponents: string[] }>
-): Promise<FrameNode | null> {
-    const targetFrame = figma.getNodeById(screenId);
-    if (!targetFrame || targetFrame.type !== 'FRAME') return null;
+// Colors
+const COLORS = {
+    bg: { r: 0.08, g: 0.08, b: 0.1 },
+    cardBg: { r: 0.12, g: 0.12, b: 0.14 },
+    accent: { r: 0.486, g: 0.227, b: 0.929 }, // Purple #7c3aed
+    accentLight: { r: 0.659, g: 0.333, b: 0.969 }, // Light purple
+    critical: { r: 0.91, g: 0.3, b: 0.24 },
+    warning: { r: 0.95, g: 0.61, b: 0.07 },
+    info: { r: 0.2, g: 0.6, b: 0.86 },
+    white: { r: 1, g: 1, b: 1 },
+    gray: { r: 0.6, g: 0.6, b: 0.65 },
+    lightGray: { r: 0.85, g: 0.85, b: 0.88 },
+};
 
-    await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-
-    const card = figma.createFrame();
-    card.name = `⚠️ Edge Case Issues - ${targetFrame.name}`;
-    card.resize(280, 40 + issues.length * 60);
-    card.x = targetFrame.x + targetFrame.width + 20;
-    card.y = targetFrame.y;
-    card.fills = [{ type: 'SOLID', color: { r: 0.12, g: 0.12, b: 0.14 } }];
-    card.cornerRadius = 12;
-    card.layoutMode = 'VERTICAL';
-    card.paddingTop = 16;
-    card.paddingBottom = 16;
-    card.paddingLeft = 16;
-    card.paddingRight = 16;
-    card.itemSpacing = 12;
-    card.layoutSizingVertical = 'HUG';
-
-    // Title
-    const title = figma.createText();
-    title.characters = `⚠️ ${issues.length} Issue${issues.length > 1 ? 's' : ''} Found`;
-    title.fontSize = 14;
-    title.fontName = { family: 'Inter', style: 'Bold' };
-    title.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
-    card.appendChild(title);
-
-    // Issues
-    for (const issue of issues) {
-        const issueFrame = figma.createFrame();
-        issueFrame.name = issue.name;
-        issueFrame.fills = [];
-        issueFrame.layoutMode = 'VERTICAL';
-        issueFrame.itemSpacing = 4;
-        issueFrame.layoutSizingHorizontal = 'FILL';
-        issueFrame.layoutSizingVertical = 'HUG';
-
-        const severityColor =
-            issue.severity === 'critical' ? { r: 0.91, g: 0.3, b: 0.24 } :
-                issue.severity === 'warning' ? { r: 0.95, g: 0.61, b: 0.07 } :
-                    { r: 0.2, g: 0.6, b: 0.86 };
-
-        const issueName = figma.createText();
-        issueName.characters = `${issue.severity === 'critical' ? '🔴' : issue.severity === 'warning' ? '🟡' : '🔵'} ${issue.name}`;
-        issueName.fontSize = 12;
-        issueName.fontName = { family: 'Inter', style: 'Bold' };
-        issueName.fills = [{ type: 'SOLID', color: severityColor }];
-        issueFrame.appendChild(issueName);
-
-        const suggestion = figma.createText();
-        suggestion.characters = `→ ${issue.suggestedComponents.join(', ')}`;
-        suggestion.fontSize = 10;
-        suggestion.fontName = { family: 'Inter', style: 'Regular' };
-        suggestion.fills = [{ type: 'SOLID', color: { r: 0.7, g: 0.7, b: 0.7 } }];
-        issueFrame.appendChild(suggestion);
-
-        card.appendChild(issueFrame);
+// Create beautiful report frame
+async function createReportFrame(): Promise<FrameNode | null> {
+    if (!lastAnalysisResult || enrichedScreensCache.length === 0) {
+        figma.notify('⚠️ Please run analysis first', { error: true });
+        return null;
     }
 
-    figma.currentPage.appendChild(card);
-    return card;
+    // Load fonts
+    await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'SemiBold' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+
+    const result = lastAnalysisResult;
+    const screens = enrichedScreensCache;
+
+    // Find the rightmost frame to position report
+    const selectedFrames = getSelectedFrames();
+    let maxX = 0;
+    let minY = 0;
+    selectedFrames.forEach(f => {
+        if (f.x + f.width > maxX) maxX = f.x + f.width;
+        if (minY === 0 || f.y < minY) minY = f.y;
+    });
+
+    // Main report container
+    const report = figma.createFrame();
+    report.name = '📋 Edge Case Report';
+    report.x = maxX + 100;
+    report.y = minY;
+    report.fills = [{ type: 'SOLID', color: COLORS.bg }];
+    report.cornerRadius = 24;
+    report.layoutMode = 'VERTICAL';
+    report.paddingTop = 32;
+    report.paddingBottom = 32;
+    report.paddingLeft = 32;
+    report.paddingRight = 32;
+    report.itemSpacing = 24;
+    report.layoutSizingHorizontal = 'HUG';
+    report.layoutSizingVertical = 'HUG';
+    report.minWidth = 400;
+
+    // ========== HEADER ==========
+    const header = figma.createFrame();
+    header.name = 'Header';
+    header.fills = [];
+    header.layoutMode = 'VERTICAL';
+    header.itemSpacing = 8;
+    header.layoutSizingHorizontal = 'FILL';
+    header.layoutSizingVertical = 'HUG';
+
+    const titleRow = figma.createFrame();
+    titleRow.name = 'Title Row';
+    titleRow.fills = [];
+    titleRow.layoutMode = 'HORIZONTAL';
+    titleRow.itemSpacing = 12;
+    titleRow.layoutSizingHorizontal = 'FILL';
+    titleRow.layoutSizingVertical = 'HUG';
+
+    const logo = figma.createText();
+    logo.characters = '⚡';
+    logo.fontSize = 28;
+    logo.fontName = { family: 'Inter', style: 'Bold' };
+    titleRow.appendChild(logo);
+
+    const title = figma.createText();
+    title.characters = 'Edge Case Report';
+    title.fontSize = 28;
+    title.fontName = { family: 'Inter', style: 'Bold' };
+    title.fills = [{ type: 'SOLID', color: COLORS.white }];
+    titleRow.appendChild(title);
+
+    header.appendChild(titleRow);
+
+    const subtitle = figma.createText();
+    subtitle.characters = `Generated ${new Date().toLocaleDateString()} • ${result.totalScreens} screens analyzed`;
+    subtitle.fontSize = 14;
+    subtitle.fontName = { family: 'Inter', style: 'Regular' };
+    subtitle.fills = [{ type: 'SOLID', color: COLORS.gray }];
+    header.appendChild(subtitle);
+
+    report.appendChild(header);
+
+    // ========== SUMMARY STATS ==========
+    const statsRow = figma.createFrame();
+    statsRow.name = 'Stats';
+    statsRow.fills = [{ type: 'SOLID', color: COLORS.cardBg }];
+    statsRow.cornerRadius = 16;
+    statsRow.layoutMode = 'HORIZONTAL';
+    statsRow.itemSpacing = 0;
+    statsRow.layoutSizingHorizontal = 'FILL';
+    statsRow.layoutSizingVertical = 'HUG';
+
+    const createStat = (value: number, label: string, color: RGB): FrameNode => {
+        const stat = figma.createFrame();
+        stat.name = label;
+        stat.fills = [];
+        stat.layoutMode = 'VERTICAL';
+        stat.itemSpacing = 4;
+        stat.paddingTop = 20;
+        stat.paddingBottom = 20;
+        stat.paddingLeft = 24;
+        stat.paddingRight = 24;
+        stat.layoutSizingHorizontal = 'FILL';
+        stat.layoutSizingVertical = 'HUG';
+        stat.primaryAxisAlignItems = 'CENTER';
+        stat.counterAxisAlignItems = 'CENTER';
+
+        const valueText = figma.createText();
+        valueText.characters = value.toString();
+        valueText.fontSize = 32;
+        valueText.fontName = { family: 'Inter', style: 'Bold' };
+        valueText.fills = [{ type: 'SOLID', color }];
+        stat.appendChild(valueText);
+
+        const labelText = figma.createText();
+        labelText.characters = label;
+        labelText.fontSize = 12;
+        labelText.fontName = { family: 'Inter', style: 'Medium' };
+        labelText.fills = [{ type: 'SOLID', color: COLORS.gray }];
+        stat.appendChild(labelText);
+
+        return stat;
+    };
+
+    statsRow.appendChild(createStat(result.totalIssues, 'Total', COLORS.white));
+    statsRow.appendChild(createStat(result.criticalCount, 'Critical', COLORS.critical));
+    statsRow.appendChild(createStat(result.warningCount, 'Warning', COLORS.warning));
+    statsRow.appendChild(createStat(result.infoCount, 'Info', COLORS.info));
+
+    report.appendChild(statsRow);
+
+    // ========== ISSUES BY SCREEN ==========
+    for (const screen of screens) {
+        if (screen.issues.length === 0) continue;
+
+        const screenSection = figma.createFrame();
+        screenSection.name = `Screen: ${screen.screenName}`;
+        screenSection.fills = [{ type: 'SOLID', color: COLORS.cardBg }];
+        screenSection.cornerRadius = 16;
+        screenSection.layoutMode = 'VERTICAL';
+        screenSection.itemSpacing = 16;
+        screenSection.paddingTop = 20;
+        screenSection.paddingBottom = 20;
+        screenSection.paddingLeft = 20;
+        screenSection.paddingRight = 20;
+        screenSection.layoutSizingHorizontal = 'FILL';
+        screenSection.layoutSizingVertical = 'HUG';
+
+        // Screen title
+        const screenTitle = figma.createText();
+        screenTitle.characters = `📱 ${screen.screenName}`;
+        screenTitle.fontSize = 16;
+        screenTitle.fontName = { family: 'Inter', style: 'SemiBold' };
+        screenTitle.fills = [{ type: 'SOLID', color: COLORS.white }];
+        screenSection.appendChild(screenTitle);
+
+        // Issues
+        for (const issue of screen.issues) {
+            const issueRow = figma.createFrame();
+            issueRow.name = issue.name;
+            issueRow.fills = [];
+            issueRow.layoutMode = 'VERTICAL';
+            issueRow.itemSpacing = 8;
+            issueRow.layoutSizingHorizontal = 'FILL';
+            issueRow.layoutSizingVertical = 'HUG';
+
+            // Issue header row
+            const issueHeader = figma.createFrame();
+            issueHeader.name = 'Issue Header';
+            issueHeader.fills = [];
+            issueHeader.layoutMode = 'HORIZONTAL';
+            issueHeader.itemSpacing = 8;
+            issueHeader.layoutSizingHorizontal = 'FILL';
+            issueHeader.layoutSizingVertical = 'HUG';
+
+            const severityIcon = figma.createText();
+            severityIcon.characters = issue.severity === 'critical' ? '🔴' : issue.severity === 'warning' ? '🟡' : '🔵';
+            severityIcon.fontSize = 14;
+            issueHeader.appendChild(severityIcon);
+
+            const issueName = figma.createText();
+            issueName.characters = issue.name;
+            issueName.fontSize = 14;
+            issueName.fontName = { family: 'Inter', style: 'Medium' };
+            issueName.fills = [{ type: 'SOLID', color: COLORS.lightGray }];
+            issueHeader.appendChild(issueName);
+
+            issueRow.appendChild(issueHeader);
+
+            // Component links row
+            const componentsRow = figma.createFrame();
+            componentsRow.name = 'Components';
+            componentsRow.fills = [];
+            componentsRow.layoutMode = 'HORIZONTAL';
+            componentsRow.itemSpacing = 8;
+            componentsRow.layoutSizingHorizontal = 'HUG';
+            componentsRow.layoutSizingVertical = 'HUG';
+            componentsRow.paddingLeft = 22; // Indent under icon
+
+            const matches = issue.libraryMatches || issue.suggestedComponents.map(c => ({ name: c }));
+
+            for (const match of matches) {
+                const link = findComponentLink(match.name);
+
+                const componentTag = figma.createFrame();
+                componentTag.name = match.name;
+                componentTag.fills = [{ type: 'SOLID', color: COLORS.accent }];
+                componentTag.cornerRadius = 6;
+                componentTag.layoutMode = 'HORIZONTAL';
+                componentTag.itemSpacing = 4;
+                componentTag.paddingTop = 4;
+                componentTag.paddingBottom = 4;
+                componentTag.paddingLeft = 8;
+                componentTag.paddingRight = 8;
+                componentTag.layoutSizingHorizontal = 'HUG';
+                componentTag.layoutSizingVertical = 'HUG';
+
+                const tagIcon = figma.createText();
+                tagIcon.characters = '🔗';
+                tagIcon.fontSize = 10;
+                componentTag.appendChild(tagIcon);
+
+                const tagName = figma.createText();
+                tagName.characters = match.libraryName || match.name;
+                tagName.fontSize = 10;
+                tagName.fontName = { family: 'Inter', style: 'SemiBold' };
+                tagName.fills = [{ type: 'SOLID', color: COLORS.white }];
+                componentTag.appendChild(tagName);
+
+                // Add hyperlink if available
+                if (link) {
+                    tagName.hyperlink = { type: 'URL', value: link.url };
+                }
+
+                componentsRow.appendChild(componentTag);
+            }
+
+            issueRow.appendChild(componentsRow);
+            screenSection.appendChild(issueRow);
+        }
+
+        report.appendChild(screenSection);
+    }
+
+    // ========== FLOW ISSUES ==========
+    if (result.flowIssues.deadEnds.length > 0) {
+        const flowSection = figma.createFrame();
+        flowSection.name = 'Flow Issues';
+        flowSection.fills = [{ type: 'SOLID', color: COLORS.cardBg }];
+        flowSection.cornerRadius = 16;
+        flowSection.layoutMode = 'VERTICAL';
+        flowSection.itemSpacing = 12;
+        flowSection.paddingTop = 20;
+        flowSection.paddingBottom = 20;
+        flowSection.paddingLeft = 20;
+        flowSection.paddingRight = 20;
+        flowSection.layoutSizingHorizontal = 'FILL';
+        flowSection.layoutSizingVertical = 'HUG';
+
+        const flowTitle = figma.createText();
+        flowTitle.characters = '🧭 Flow Issues';
+        flowTitle.fontSize = 16;
+        flowTitle.fontName = { family: 'Inter', style: 'SemiBold' };
+        flowTitle.fills = [{ type: 'SOLID', color: COLORS.white }];
+        flowSection.appendChild(flowTitle);
+
+        const deadEndsText = figma.createText();
+        deadEndsText.characters = `🚫 Dead ends: ${result.flowIssues.deadEnds.join(', ')}`;
+        deadEndsText.fontSize = 12;
+        deadEndsText.fontName = { family: 'Inter', style: 'Regular' };
+        deadEndsText.fills = [{ type: 'SOLID', color: COLORS.warning }];
+        flowSection.appendChild(deadEndsText);
+
+        report.appendChild(flowSection);
+    }
+
+    // ========== FOOTER ==========
+    const footer = figma.createFrame();
+    footer.name = 'Footer';
+    footer.fills = [];
+    footer.layoutMode = 'HORIZONTAL';
+    footer.itemSpacing = 8;
+    footer.layoutSizingHorizontal = 'HUG';
+    footer.layoutSizingVertical = 'HUG';
+    footer.primaryAxisAlignItems = 'CENTER';
+
+    const footerText = figma.createText();
+    footerText.characters = 'Linked to';
+    footerText.fontSize = 12;
+    footerText.fontName = { family: 'Inter', style: 'Regular' };
+    footerText.fills = [{ type: 'SOLID', color: COLORS.gray }];
+    footer.appendChild(footerText);
+
+    const footerLink = figma.createText();
+    footerLink.characters = 'shadcn/ui 💜';
+    footerLink.fontSize = 12;
+    footerLink.fontName = { family: 'Inter', style: 'SemiBold' };
+    footerLink.fills = [{ type: 'SOLID', color: COLORS.accentLight }];
+    footerLink.hyperlink = { type: 'URL', value: 'https://www.figma.com/design/lmUgIGwdG2ZaVfvZzFuU2H/-shadcn-ui---Design-System--Community-' };
+    footer.appendChild(footerLink);
+
+    report.appendChild(footer);
+
+    // Add to page and select
+    figma.currentPage.appendChild(report);
+    figma.currentPage.selection = [report];
+    figma.viewport.scrollAndZoomIntoView([report]);
+
+    return report;
 }
 
 // Handle messages from UI
@@ -233,14 +509,14 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         }
 
         case 'analysis-complete': {
-            const result = msg.payload as { result: AnalysisResult };
-            lastAnalysisResult = result.result;
+            const resultPayload = msg.payload as { result: AnalysisResult };
+            lastAnalysisResult = resultPayload.result;
 
             // Enrich results with library component links
-            const enrichedScreens = result.result.screens.map(screen => ({
+            const enrichedScreens: EnrichedScreen[] = resultPayload.result.screens.map(screen => ({
                 ...screen,
                 issues: screen.issues.map(issue => {
-                    const matches = issue.suggestedComponents.map(comp => {
+                    const matches: LibraryMatch[] = issue.suggestedComponents.map(comp => {
                         const link = findComponentLink(comp);
                         return link
                             ? { name: comp, libraryUrl: link.url, libraryName: link.name }
@@ -250,12 +526,14 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
                 })
             }));
 
+            enrichedScreensCache = enrichedScreens;
+
             figma.ui.postMessage({
                 type: 'results-enriched',
                 payload: { screens: enrichedScreens }
             });
 
-            figma.notify(`✅ Analysis complete: ${result.result.totalIssues} issues found`, { timeout: 3000 });
+            figma.notify(`✅ Analysis complete: ${resultPayload.result.totalIssues} issues found`, { timeout: 3000 });
             break;
         }
 
@@ -272,28 +550,18 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         }
 
         case 'insert-placeholders': {
-            if (!lastAnalysisResult) {
-                figma.ui.postMessage({
-                    type: 'error',
-                    payload: { message: 'Please run analysis first' }
-                });
-                return;
+            const report = await createReportFrame();
+            if (report) {
+                figma.notify(`✅ Created report frame`, { timeout: 2000 });
             }
-
-            let cardsCreated = 0;
-            for (const screen of lastAnalysisResult.screens) {
-                if (screen.issues.length > 0) {
-                    await createAnnotationCard(screen.screenId, screen.issues);
-                    cardsCreated++;
-                }
-            }
-
-            figma.notify(`✅ Created ${cardsCreated} annotation cards`, { timeout: 2000 });
             break;
         }
 
         case 'generate-report': {
-            figma.notify('📋 Report generation coming soon!', { timeout: 2000 });
+            const report = await createReportFrame();
+            if (report) {
+                figma.notify(`✅ Report generated!`, { timeout: 2000 });
+            }
             break;
         }
 

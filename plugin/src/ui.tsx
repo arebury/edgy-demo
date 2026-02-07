@@ -384,7 +384,7 @@ function App() {
 
                     <div className="actions">
                         <button className="btn-secondary" onClick={handleInsertAnnotations}>
-                            📌 Add Annotations to Canvas
+                            📋 Generate Report on Canvas
                         </button>
                     </div>
                 </>
